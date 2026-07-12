@@ -1,0 +1,11 @@
+{
+  "name": "spatial_api",
+  "version": "1.0.0",
+  "main": "index.js",
+  "author": "",
+  "dependencies": {
+    "@faker-js/faker": "^10.5.0",
+    "express": "^5.2.1",
+    "zcatalyst-sdk-node": "latest"
+  }
+}
