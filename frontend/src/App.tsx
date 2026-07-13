@@ -1,13 +1,16 @@
-import Sidebar from './components/Sidebar';
-import TopNav from './components/TopNav';
-import MainLayout from './components/MainLayout';
+import { DashboardProvider } from './context/DashboardContext';
+import { MainLayout } from './components/layout/MainLayout';
+import { CrimeMap } from './components/map/CrimeMap';
 
-export default function App() {
+function App() {
   return (
-    <div className="w-full h-full bg-background">
-      <Sidebar />
-      <TopNav />
-      <MainLayout />
-    </div>
+    <DashboardProvider>
+      <MainLayout>
+        {/* Phase 3: Geospatial Map Integrated */}
+        <CrimeMap />
+      </MainLayout>
+    </DashboardProvider>
   );
 }
+
+export default App;
