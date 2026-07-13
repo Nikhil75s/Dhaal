@@ -1,11 +1,8 @@
 import { Search, Filter } from 'lucide-react';
-import { useDashboard } from '../../context/DashboardContext';
 import { DistrictDropdown } from '../common/DistrictDropdown';
 import { DateRangeDropdown } from '../common/DateRangeDropdown';
 
 export const TopNav = () => {
-  const { filters } = useDashboard();
-
   return (
     <header className="h-16 bg-navy-900 border-b border-navy-800 flex items-center px-8 justify-between z-10 relative shadow-sm">
       

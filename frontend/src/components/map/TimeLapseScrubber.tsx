@@ -8,7 +8,7 @@ export const TimeLapseScrubber = () => {
   const [speed, setSpeed] = useState<1 | 2 | 4>(1);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
     
     if (isPlaying) {
       interval = setInterval(() => {
@@ -50,11 +50,6 @@ export const TimeLapseScrubber = () => {
       setFilters(prev => ({ ...prev, replayDate: prev.startDate }));
     }
     setIsPlaying(!isPlaying);
-  };
-
-  const handleStop = () => {
-    setIsPlaying(false);
-    setFilters(prev => ({ ...prev, replayDate: null }));
   };
 
   const handleSkipBack = () => {
