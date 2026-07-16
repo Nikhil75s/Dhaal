@@ -3,7 +3,7 @@ import logo from '../../assets/logo.png';
 
 export const Sidebar = () => {
   return (
-    <aside className="w-20 bg-navy-900 flex flex-col items-center py-6 border-r border-navy-800 z-20 shadow-lg">
+    <aside className="w-20 bg-[#0B1120] flex flex-col items-center py-6 border-r border-white/10 z-20 shadow-[4px_0_32px_rgba(0,0,0,0.8)] relative">
       <div className="mb-10">
         <img src={logo} alt="Crime Analytics" className="w-12 h-12 object-contain" />
       </div>

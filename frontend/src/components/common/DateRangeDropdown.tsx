@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { Calendar, ChevronDown } from 'lucide-react';
 import { useDashboard } from '../../context/DashboardContext';
+import { CustomDatePicker } from './CustomDatePicker';
+
 
 export const DateRangeDropdown = () => {
   const { filters, setFilters } = useDashboard();
@@ -18,19 +20,11 @@ export const DateRangeDropdown = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFilters(prev => ({ ...prev, startDate: e.target.value }));
-  };
-
-  const handleEndDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFilters(prev => ({ ...prev, endDate: e.target.value }));
-  };
-
   return (
     <div className="relative" ref={wrapperRef}>
       <div 
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center bg-navy-800/50 px-5 py-2 rounded-full border border-navy-800 hover:border-khaki/30 transition-colors text-sm cursor-pointer shadow-sm"
+        className="flex items-center bg-[#151B2B] px-5 py-2 rounded-full border border-white/10 hover:border-khaki/30 transition-colors text-sm cursor-pointer shadow-[0_4px_12px_rgba(0,0,0,0.5)]"
       >
         <div className="flex items-center overflow-hidden">
           <Calendar size={16} className="text-khaki mr-3 shrink-0" />
@@ -42,28 +36,18 @@ export const DateRangeDropdown = () => {
       </div>
 
       {isOpen && (
-        <div className="absolute top-full mt-2 left-0 w-72 bg-navy-900 border border-navy-800 rounded-xl shadow-2xl z-50 overflow-hidden p-4">
+        <div className="absolute top-full mt-2 left-0 w-72 bg-[#0B1120] border border-white/10 rounded-xl shadow-[0_12px_48px_rgba(0,0,0,0.9)] z-50 p-4">
           <div className="flex flex-col space-y-4">
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Start Date</label>
-              <input 
-                type="date" 
-                value={filters.startDate}
-                onChange={handleStartDateChange}
-                className="w-full bg-navy-800 border border-navy-700 rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-khaki/50 transition-colors"
-                style={{ colorScheme: 'dark' }}
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">End Date</label>
-              <input 
-                type="date" 
-                value={filters.endDate}
-                onChange={handleEndDateChange}
-                className="w-full bg-navy-800 border border-navy-700 rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-khaki/50 transition-colors"
-                style={{ colorScheme: 'dark' }}
-              />
-            </div>
+            <CustomDatePicker 
+              label="Start Date"
+              value={filters.startDate}
+              onChange={(val) => setFilters(prev => ({ ...prev, startDate: val }))}
+            />
+            <CustomDatePicker 
+              label="End Date"
+              value={filters.endDate}
+              onChange={(val) => setFilters(prev => ({ ...prev, endDate: val }))}
+            />
           </div>
         </div>
       )}

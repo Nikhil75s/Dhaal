@@ -36,7 +36,7 @@ export const DistrictDropdown = () => {
     <div className="relative" ref={wrapperRef}>
       <div 
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center bg-navy-800/50 px-5 py-2 rounded-full border border-navy-800 hover:border-khaki/30 transition-colors text-sm cursor-pointer w-56 justify-between shadow-sm"
+        className="flex items-center bg-[#151B2B] px-5 py-2 rounded-full border border-white/10 hover:border-khaki/30 transition-colors text-sm cursor-pointer w-56 justify-between shadow-[0_4px_12px_rgba(0,0,0,0.5)]"
       >
         <div className="flex items-center overflow-hidden">
           <MapPin size={16} className="text-khaki mr-3 shrink-0" />
@@ -46,8 +46,8 @@ export const DistrictDropdown = () => {
       </div>
 
       {isOpen && (
-        <div className="absolute top-full mt-2 left-0 w-64 bg-navy-900 border border-navy-800 rounded-xl shadow-2xl z-50 overflow-hidden">
-          <div className="p-3 border-b border-navy-800 flex items-center bg-navy-800/30">
+        <div className="absolute top-full mt-2 left-0 w-64 bg-[#0B1120] border border-white/10 rounded-xl shadow-[0_12px_48px_rgba(0,0,0,0.9)] z-50 overflow-hidden">
+          <div className="p-3 border-b border-white/10 flex items-center bg-[#151B2B]">
             <Search size={14} className="text-gray-400 mx-2 shrink-0" />
             <input
               type="text"

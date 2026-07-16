@@ -4,10 +4,10 @@ import { DateRangeDropdown } from '../common/DateRangeDropdown';
 
 export const TopNav = () => {
   return (
-    <header className="h-16 bg-navy-900 border-b border-navy-800 flex items-center px-8 justify-between z-10 relative shadow-sm">
+    <header className="h-16 bg-[#0B1120] border-b border-white/10 flex items-center px-8 justify-between z-[10000] relative shadow-[0_4px_32px_rgba(0,0,0,0.8)]">
       
       {/* Global Search */}
-      <div className="flex items-center bg-navy-800/50 rounded-full px-4 py-2 w-96 border border-navy-800 focus-within:border-khaki/50 focus-within:bg-navy-800 transition-all duration-300">
+      <div className="flex items-center bg-[#151B2B] rounded-full px-4 py-2 w-96 border border-white/10 focus-within:border-khaki/50 transition-all duration-300 shadow-inner">
         <Search size={18} className="text-gray-400 mr-3" />
         <input 
           type="text" 
