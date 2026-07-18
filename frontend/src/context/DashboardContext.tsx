@@ -11,6 +11,8 @@ export interface DashboardFilters {
 interface DashboardContextProps {
   filters: DashboardFilters;
   setFilters: React.Dispatch<React.SetStateAction<DashboardFilters>>;
+  activeView: 'map' | 'network' | 'data' | 'settings';
+  setActiveView: React.Dispatch<React.SetStateAction<'map' | 'network' | 'data' | 'settings'>>;
 }
 
 const defaultFilters: DashboardFilters = {
@@ -24,9 +26,10 @@ const DashboardContext = createContext<DashboardContextProps | undefined>(undefi
 
 export const DashboardProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [filters, setFilters] = useState<DashboardFilters>(defaultFilters);
+  const [activeView, setActiveView] = useState<'map' | 'network' | 'data' | 'settings'>('map');
 
   return (
-    <DashboardContext.Provider value={{ filters, setFilters }}>
+    <DashboardContext.Provider value={{ filters, setFilters, activeView, setActiveView }}>
       {children}
     </DashboardContext.Provider>
   );

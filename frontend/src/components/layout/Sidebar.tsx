@@ -1,7 +1,10 @@
 import { Map, Network, Database, Settings } from 'lucide-react';
 import logo from '../../assets/logo.png';
+import { useDashboard } from '../../context/DashboardContext';
 
 export const Sidebar = () => {
+  const { activeView, setActiveView } = useDashboard();
+
   return (
     <aside className="w-20 bg-navy-900 flex flex-col items-center py-6 border-r border-navy-800 z-20 shadow-lg">
       <div className="mb-10">
@@ -9,21 +12,21 @@ export const Sidebar = () => {
       </div>
       
       <nav className="flex flex-col space-y-8 flex-1 w-full px-2">
-        <NavItem icon={<Map size={24} />} label="Map" active />
-        <NavItem icon={<Network size={24} />} label="Graph" />
-        <NavItem icon={<Database size={24} />} label="Data" />
+        <NavItem icon={<Map size={24} />} label="Map" active={activeView === 'map'} onClick={() => setActiveView('map')} />
+        <NavItem icon={<Network size={24} />} label="Graph" active={activeView === 'network'} onClick={() => setActiveView('network')} />
+        <NavItem icon={<Database size={24} />} label="Data" active={activeView === 'data'} onClick={() => setActiveView('data')} />
       </nav>
       
       <div className="mt-auto w-full px-2">
-        <NavItem icon={<Settings size={24} />} label="Settings" />
+        <NavItem icon={<Settings size={24} />} label="Settings" active={activeView === 'settings'} onClick={() => setActiveView('settings')} />
       </div>
     </aside>
   );
 };
 
-const NavItem = ({ icon, label, active = false }: { icon: React.ReactNode; label: string; active?: boolean }) => {
+const NavItem = ({ icon, label, active = false, onClick }: { icon: React.ReactNode; label: string; active?: boolean; onClick?: () => void }) => {
   return (
-    <button className={`flex flex-col items-center justify-center w-full py-3 group transition-colors duration-200 rounded-xl ${active ? 'text-khaki' : 'text-gray-400 hover:text-gray-100'}`}>
+    <button onClick={onClick} className={`flex flex-col items-center justify-center w-full py-3 group transition-colors duration-200 rounded-xl cursor-pointer ${active ? 'text-khaki' : 'text-gray-400 hover:text-gray-100'}`}>
       <div className={`p-2 rounded-lg transition-colors ${active ? 'bg-khaki/10 text-khaki' : 'group-hover:bg-navy-800'}`}>
         {icon}
       </div>
