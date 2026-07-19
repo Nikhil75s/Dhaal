@@ -37,21 +37,32 @@ class ReportsController {
       const action = payload.action;
       const args = payload.body || {};
 
-      if (action === 'generate') {
-        // Enforce Authentication and Authorization explicitly for this action
-        const authenticatedUser = await this.authService.verifyAndAuthorize(req, 'generate_report');
-
-        // Validate required arguments for 'generate'
-        if (!args.alertId || !args.district || !args.severity || !args.details) {
-          return createErrorResponse('Missing required arguments: alertId, district, severity, details', 400);
+      switch (action) {
+        case 'generate': {
+          const authenticatedUser = await this.authService.verifyAndAuthorize(req, 'generate_report');
+          if (!args.alertId || !args.district || !args.severity || !args.details) {
+            return createErrorResponse('Missing required arguments: alertId, district, severity, details', 400);
+          }
+          const result = await this.service.generateIntelligenceBrief(args, req, context, authenticatedUser);
+          return createSuccessResponse(result.message, result.data);
         }
-        
-        // Pass the authenticatedUser explicitly instead of mutating req
-        const result = await this.service.generateIntelligenceBrief(args, req, context, authenticatedUser);
-        return createSuccessResponse(result.message, result.data);
+        case 'list': {
+          const authenticatedUser = await this.authService.verifyAndAuthorize(req, 'view_report');
+          const result = await this.service.listHistoricalReports(args, req, authenticatedUser);
+          return createSuccessResponse(result.message, result.data);
+        }
+        case 'get': {
+          const authenticatedUser = await this.authService.verifyAndAuthorize(req, 'view_report');
+          if (!args.reportId) {
+            return createErrorResponse('Missing required argument: reportId', 400);
+          }
+          const result = await this.service.getHistoricalReport(args, req, authenticatedUser);
+          return createSuccessResponse(result.message, result.data);
+        }
+        default: {
+          return createErrorResponse('Invalid action. Supported actions: generate, list, get', 400);
+        }
       }
-
-      return createErrorResponse('Invalid action. Supported actions: generate', 400);
     } catch (error) {
       // Log errors safely. Note: AuthService already logs security failures.
       logger.error('Controller failed to process request', { 
