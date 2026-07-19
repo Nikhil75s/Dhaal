@@ -1,7 +1,0 @@
-{
-  "functions": {
-    "targets": ["spatial_api", "network_api", "reports_api"],
-    "ignore": [],
-    "source": "functions"
-  }
-}

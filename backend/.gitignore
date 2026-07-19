@@ -1,9 +1,0 @@
-# Dependencies
-node_modules/
-functions/**/node_modules/
-
-# Secrets
-.catalystrc
-
-# Catalyst Build Artifacts
-.build/
