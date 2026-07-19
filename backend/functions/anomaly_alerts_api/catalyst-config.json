@@ -1,0 +1,7 @@
+{
+  "name": "anomaly_alerts_api",
+  "type": "function",
+  "runtime": "nodejs24",
+  "handler": "index.js",
+  "description": "Placeholder Catalyst serverless function for anomaly alert scaffolding."
+}
