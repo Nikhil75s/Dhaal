@@ -23,10 +23,16 @@ class ReportsService {
    * @param {object} args - The anomaly alert payload.
    * @param {object} req - The incoming Catalyst request object.
    * @param {object} context - The Catalyst context.
+   * @param {object} authenticatedUser - The explicitly authorized user executing this action.
    * @returns {Promise<object>} Pipeline execution result and metadata.
    */
-  async generateIntelligenceBrief(args, req, context) {
-    logger.info('Starting Intelligence Brief generation for alert', { alertId: args.alertId });
+  async generateIntelligenceBrief(args, req, context, authenticatedUser) {
+    // Log business layer execution including the responsible actor.
+    logger.info('Starting Intelligence Brief generation for alert', { 
+      alertId: args.alertId,
+      requestedByUserId: authenticatedUser.user_id,
+      timestamp: new Date().toISOString()
+    });
 
     if (!SMARTBROWZ_TEMPLATE_ID) {
       throw new Error('Configuration Error: SMARTBROWZ_TEMPLATE_ID is missing');
@@ -65,9 +71,11 @@ class ReportsService {
       logger.info('PDF uploaded successfully', { uploadResultId: uploadResult.id });
 
       // 3. Save metadata to Data Store (IntelligenceReports table)
+      // Note: We currently rely on application logs to trace the actor (authenticatedUser.user_id).
+      // Future Schema Enhancement: Add a 'GeneratedBy' column to the IntelligenceReports schema
+      // to persist authenticatedUser.user_id directly in the database alongside the report metadata.
       const metadata = {
         alertId: args.alertId,
-        // Using the actual file ID from the Catalyst response instead of a fabricated URL
         pdfUrl: uploadResult.id,
         generatedDate: new Date().toISOString()
       };
@@ -86,7 +94,7 @@ class ReportsService {
       };
     } catch (error) {
       logger.error('Failed to generate intelligence brief pipeline', error);
-      error.statusCode = 500;
+      error.statusCode = error.statusCode || 500;
       error.message = error.message || 'Intelligence Brief generation failed';
       throw error;
     }
