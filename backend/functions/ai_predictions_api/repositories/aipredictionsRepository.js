@@ -1,50 +1,86 @@
 // Repository layer for ai_predictions_api.
 // Responsibilities:
-// - Access the Catalyst Data Store table directly.
-// - Return raw records without applying business logic.
+// - Isolate Catalyst Data Store interactions.
+// - Implement ZCQL pagination loop to bypass 300-row limit.
+// - Flatten and normalize the nested ZCQL response.
+// - Extract system ROWIDs correctly.
+// No business logic belongs here.
 
-const { initializeCatalystApp } = require('../utils/catalystHelper');
+const catalystHelper = require('../utils/catalystHelper');
+const { createLogger } = require('../utils/logger');
+
+const logger = createLogger('aipredictions_repository');
 
 /**
- * Retrieves all rows from a Data Store table using paginated fetches.
- * Replaces the deprecated getAllRows() which was capped at 200 rows.
+ * Normalizes a nested ZCQL row into a flat plain JavaScript object.
+ * Extracts values from CaseMaster and CrimeHead tables.
  *
- * Uses getPagedRows() (SDK v3.4.0 recommended API) with automatic
- * pagination via next_token to collect the complete result set.
- *
- * @param {import('zcatalyst-sdk-node/lib/datastore/table').Table} table - Catalyst table instance.
- * @returns {Promise<Array>} All rows from the table.
+ * @param {object} row - The nested ZCQL row object.
+ * @returns {object} Flattened plain object.
  */
-async function fetchAllRowsPaginated(table) {
-  const allRows = [];
-  let nextToken;
+function normalizeRow(row) {
+  const caseMaster = row.CaseMaster || {};
+  const crimeHead = row.CrimeHead || {};
 
-  do {
-    const response = await table.getPagedRows({ nextToken, maxRows: 200 });
-    if (response.data && response.data.length > 0) {
-      allRows.push(...response.data);
+  return {
+    id: caseMaster.ROWID,
+    CaseMasterID: caseMaster.CaseMasterID,
+    DistrictID: caseMaster.DistrictID,
+    CrimeRegisteredDate: caseMaster.CrimeRegisteredDate,
+    CrimeMajorHeadID: caseMaster.CrimeMajorHeadID,
+    latitude: caseMaster.latitude,
+    longitude: caseMaster.longitude,
+    CrimeGroupName: crimeHead.CrimeGroupName || 'Unknown'
+  };
+}
+
+/**
+ * Fetches all crime cases by executing a paginated ZCQL query that joins
+ * CaseMaster and CrimeHead.
+ *
+ * @param {object} requestData - Normalized Catalyst request context.
+ * @returns {Promise<Array<object>>} Flattened array of all cases.
+ */
+async function getAllCases(requestData) {
+  const catalystApp = catalystHelper.initialize(requestData.catalystRequest);
+  const zcql = catalystApp.zcql();
+
+  // ZCQL JOIN query fetching required fields for predictions.
+  // We omit system metadata (CREATORID, CREATEDTIME, MODIFIEDTIME) intentionally.
+  const queryTemplate = `
+    SELECT CaseMaster.ROWID, CaseMaster.CaseMasterID, CaseMaster.DistrictID, CaseMaster.CrimeRegisteredDate, CaseMaster.CrimeMajorHeadID, CaseMaster.latitude, CaseMaster.longitude, CrimeHead.CrimeGroupName
+    FROM CaseMaster
+    INNER JOIN CrimeHead ON CaseMaster.CrimeMajorHeadID = CrimeHead.ROWID
+  `;
+
+  logger.info('Fetching cases from Data Store via ZCQL pagination');
+
+  let offset = 1;
+  const limit = 200;
+  const allResults = [];
+
+  while (true) {
+    const paginatedQuery = `${queryTemplate} LIMIT ${limit} OFFSET ${offset}`;
+    
+    // executeZCQLQuery returns an array of nested objects: [{ CaseMaster: {...}, CrimeHead: {...} }]
+    const results = await zcql.executeZCQLQuery(paginatedQuery);
+    
+    // Normalize and flatten rows inline
+    const normalizedBatch = results.map(normalizeRow);
+    allResults.push(...normalizedBatch);
+
+    // If the results returned are less than the limit, we've reached the end
+    if (results.length < limit) {
+      break;
     }
-    nextToken = response.next_token;
-  } while (nextToken);
+    
+    offset += limit;
+  }
 
-  return allRows;
+  logger.info('Completed Data Store fetch', { totalCount: allResults.length });
+  return allResults;
 }
 
-// TODO: replace placeholder table name with the finalized prediction data table.
-/**
- * Retrieves all rows from the AI prediction data table.
- *
- * @param {object} req - Normalized request data from the runtime adapter.
- * @returns {Promise<Array>} Raw rows returned by the data store.
- */
-async function getAllPredictionData(req) {
-  const app = initializeCatalystApp(req);
-
-  const datastore = app.datastore();
-  const table = datastore.table('AIPredictions');
-
-  // TODO: implement prediction-specific queries, filtering, and pagination.
-  return fetchAllRowsPaginated(table);
-}
-
-module.exports = getAllPredictionData;
+module.exports = {
+  getAllCases
+};
