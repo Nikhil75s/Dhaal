@@ -84,7 +84,11 @@ export const TimeLapseScrubber = () => {
   };
 
   return (
-    <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 bg-navy-900/90 backdrop-blur-md border border-navy-800 rounded-full px-6 py-3 flex items-center space-x-6 shadow-2xl z-20 w-[700px]">
+    <div 
+      className={`absolute bottom-8 left-1/2 transform transition-transform duration-300 bg-[#0B1120]/95 backdrop-blur-md border border-white/10 rounded-full px-6 py-3 flex items-center space-x-6 shadow-[0_12px_48px_rgba(0,0,0,0.9)] z-20 w-[700px] ${
+        filters.selectedCaseId ? '-translate-x-[calc(50%+192px)]' : '-translate-x-1/2'
+      }`}
+    >
       
       {/* Controls */}
       <div className="flex items-center space-x-4">

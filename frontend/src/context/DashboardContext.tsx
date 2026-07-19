@@ -6,6 +6,7 @@ export interface DashboardFilters {
   endDate: string;
   districtId: string | null;
   replayDate: string | null;
+  selectedCaseId: string | null;
 }
 
 interface DashboardContextProps {
@@ -20,6 +21,7 @@ const defaultFilters: DashboardFilters = {
   endDate: new Date().toISOString().split('T')[0], // today
   districtId: null,
   replayDate: null,
+  selectedCaseId: null,
 };
 
 const DashboardContext = createContext<DashboardContextProps | undefined>(undefined);
