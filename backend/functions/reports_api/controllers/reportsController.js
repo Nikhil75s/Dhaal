@@ -17,6 +17,7 @@ class ReportsController {
 
   async handleRequest(req, context) {
     try {
+      // Basic request validation
       const validation = validateRequest(req);
       if (!validation.isValid) {
         return createErrorResponse(validation.message, 400);
@@ -24,11 +25,28 @@ class ReportsController {
 
       logger.info('Request accepted by controller', { endpoint: '/api/v1/reports', method: req?.method || 'UNKNOWN' });
 
-      // TODO: add endpoint-specific routing when the real API contract is known.
-      return this.service.executePlaceholder(req, context);
+      // Extract the payload (action + args)
+      // Assuming a standardized request body format based on the implementation plan
+      const payload = req.body || {};
+      const action = payload.action;
+      const args = payload.body || {};
+
+      if (action === 'generate') {
+        // Validate required arguments for 'generate'
+        if (!args.alertId || !args.district || !args.severity || !args.details) {
+          return createErrorResponse('Missing required arguments: alertId, district, severity, details', 400);
+        }
+        
+        const result = await this.service.generateIntelligenceBrief(args, req, context);
+        return createSuccessResponse(result.message, result.data);
+      }
+
+      return createErrorResponse('Invalid action. Supported actions: generate', 400);
     } catch (error) {
       logger.error('Controller failed to process request', error);
-      return createErrorResponse('Internal server error', 500);
+      const code = error.statusCode || error.status || 500;
+      const message = error.message || 'Internal server error';
+      return createErrorResponse(message, code);
     }
   }
 }
