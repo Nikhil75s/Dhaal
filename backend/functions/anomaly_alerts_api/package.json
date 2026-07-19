@@ -1,0 +1,11 @@
+{
+  "name": "anomaly_alerts_api",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "description": "Placeholder Catalyst serverless function for anomaly alert scaffolding.",
+  "dependencies": {
+    "zcatalyst-sdk-node": "^3.0.0",
+    "dotenv": "^16.4.5"
+  }
+}

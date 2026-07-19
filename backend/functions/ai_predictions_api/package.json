@@ -1,0 +1,11 @@
+{
+  "name": "ai_predictions_api",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "description": "Placeholder Catalyst serverless function for AI prediction scaffolding.",
+  "dependencies": {
+    "zcatalyst-sdk-node": "^3.0.0",
+    "dotenv": "^16.4.5"
+  }
+}
