@@ -1,0 +1,13 @@
+{
+  "name": "socio_economic_api",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "description": "Placeholder Catalyst serverless function for socio-economic data scaffolding.",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^16.4.5",
+    "express": "^5.2.1",
+    "zcatalyst-sdk-node": "^3.0.0"
+  }
+}

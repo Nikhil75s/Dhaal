@@ -1,0 +1,11 @@
+{
+  "deployment": {
+    "name": "socio_economic_api",
+    "stack": "node24",
+    "type": "advancedio",
+    "env_variables": {}
+  },
+  "execution": {
+    "main": "index.js"
+  }
+}
