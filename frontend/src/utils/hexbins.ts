@@ -84,7 +84,8 @@ export function computeHexBins(records: any[], resolution: number): HexBin[] {
   return populatedBins;
 }
 
-export function hexBinsToGeoJSON(hexBins: HexBin[]): GeoJSON.FeatureCollection {
+// Converts our custom HexBin objects into GeoJSON format for Mapbox/Mappls ingestion
+export function hexBinsToGeoJSON(hexBins: HexBin[]) {
   return {
     type: 'FeatureCollection',
     features: hexBins.map(bin => {
