@@ -30,19 +30,27 @@ app.get("/api/v1/map/clusters", async (req, res) => {
 
     // Optional filters from query params
     const districtId = req.query.districtId || "all";
-    const dateFilter = req.query.date || "all";
+    const startDate = req.query.startDate || "all";
+    const endDate = req.query.endDate || "all";
+
+    // Validate districtId to prevent SQL Injection
+    if (districtId !== "all" && !/^\d+$/.test(districtId)) {
+      return res.status(400).json({ error: "Invalid districtId format" });
+    }
 
     // Setup Cache
     const cache = catalystApp.cache();
     const segment = cache.segment();
-    const cacheKey = `hotspots_${dateFilter}_${districtId}`;
+    const cacheKey = `hotspots_${startDate}_${endDate}_${districtId}`;
 
     try {
       // 1. Try Cache First
       const cachedData = await segment.getValue(cacheKey);
       if (cachedData) {
         console.log(`Cache HIT for key: ${cacheKey}`);
-        const decompressed = zlib.inflateSync(Buffer.from(cachedData, 'base64')).toString();
+        const decompressed = zlib
+          .inflateSync(Buffer.from(cachedData, "base64"))
+          .toString();
         return res.status(200).json(JSON.parse(decompressed));
       }
     } catch (e) {
@@ -55,9 +63,10 @@ app.get("/api/v1/map/clusters", async (req, res) => {
     // Base Query joining CaseMaster and CrimeHead
     // Note: CaseMaster.CrimeMajorHeadID is a Catalyst Lookup column, so it stores the ROWID of CrimeHead!
     let query = `
-            SELECT CaseMaster.CaseMasterID, CaseMaster.CrimeNo, CaseMaster.latitude, CaseMaster.longitude, CaseMaster.CrimeRegisteredDate, CrimeHead.CrimeGroupName 
+            SELECT CaseMaster.CaseMasterID, CaseMaster.ROWID, CaseMaster.DistrictID, CaseMaster.latitude, CaseMaster.longitude, CaseMaster.CrimeRegisteredDate, CrimeHead.CrimeGroupName, PoliceStation.PoliceStationID, PoliceStation.StationName
             FROM CaseMaster 
             INNER JOIN CrimeHead ON CaseMaster.CrimeMajorHeadID = CrimeHead.ROWID
+            INNER JOIN PoliceStation ON CaseMaster.PoliceStationID = PoliceStation.ROWID
         `;
 
     // Append WHERE clauses if filters exist
@@ -66,8 +75,18 @@ app.get("/api/v1/map/clusters", async (req, res) => {
       conditions.push(`CaseMaster.DistrictID = ${districtId}`);
     }
 
-    if (dateFilter !== "all") {
-      conditions.push(`CaseMaster.CrimeRegisteredDate LIKE '${dateFilter}%'`);
+    if (startDate !== "all" && endDate !== "all") {
+      // Basic date validation YYYY-MM-DD
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+        return res.status(400).json({ error: "Invalid date format. Use YYYY-MM-DD" });
+      }
+      conditions.push(`CaseMaster.CrimeRegisteredDate >= '${startDate} 00:00:00' AND CaseMaster.CrimeRegisteredDate <= '${endDate} 23:59:59'`);
+    } else if (startDate !== "all") {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) return res.status(400).json({ error: "Invalid date format. Use YYYY-MM-DD" });
+      conditions.push(`CaseMaster.CrimeRegisteredDate >= '${startDate} 00:00:00'`);
+    } else if (endDate !== "all") {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) return res.status(400).json({ error: "Invalid date format. Use YYYY-MM-DD" });
+      conditions.push(`CaseMaster.CrimeRegisteredDate <= '${endDate} 23:59:59'`);
     }
 
     if (conditions.length > 0) {
@@ -93,7 +112,9 @@ app.get("/api/v1/map/clusters", async (req, res) => {
 
     // 3. Store in Cache (Compressed to bypass Catalyst 32KB free-tier limits!)
     try {
-      const compressed = zlib.deflateSync(JSON.stringify(allResults)).toString('base64');
+      const compressed = zlib
+        .deflateSync(JSON.stringify(allResults))
+        .toString("base64");
       await segment.put(cacheKey, compressed, 1);
     } catch (e) {
       console.error("Error setting cache:", e.message);
