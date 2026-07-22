@@ -9,7 +9,7 @@ interface HexTooltipProps {
   confidence?: string;
 }
 
-export const HexTooltip: React.FC<HexTooltipProps> = ({ x, y, count, crimeTypes, zScore, confidence }) => {
+export const HexTooltip: React.FC<HexTooltipProps> = ({ x, y, count, crimeTypes, confidence }) => {
   return (
     <div 
       className="absolute bg-[#0B1120]/95 backdrop-blur-md p-3 rounded-lg border border-white/10 text-sm z-[1000] shadow-xl pointer-events-none transform -translate-x-1/2 -translate-y-full mt-[-10px]"

@@ -18,10 +18,9 @@ const API_URL =
   "https://dhaal-60077679458.development.catalystserverless.in/server/spatial_api/api/v1/map/clusters";
 
 export const CrimeMap = () => {
-  const { filters, setFilters, setAvailableStations, setAvailableCrimeTypes } = useDashboard();
+  const { filters, setAvailableStations, setAvailableCrimeTypes } = useDashboard();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
-  const markersRef = useRef<any>(null);
 
   const [dataCount, setDataCount] = useState(0);
   const [mapLoaded, setMapLoaded] = useState(false);
