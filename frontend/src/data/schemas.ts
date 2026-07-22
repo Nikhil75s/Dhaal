@@ -75,15 +75,47 @@ export type NetworkNode = z.infer<typeof NetworkNodeSchema>;
 export type NetworkLink = z.infer<typeof NetworkLinkSchema>;
 export type NetworkGraphData = z.infer<typeof NetworkGraphSchema>;
 
-// ── AI Predictions (GET /api/v1/ai/predictions) — shape is a best guess, confirm with Backend Dev 2 ──
 export const PredictionPointSchema = z.object({
   district: z.string(),
   date: z.string(),
   predictedRisk: z.number(), // 0–100
   historicalAverage: z.number(),
 });
-export const PredictionResponseSchema = z.array(PredictionPointSchema);
 export type PredictionPoint = z.infer<typeof PredictionPointSchema>;
+
+export const EnrichedPredictionSchema = z.object({
+  predictionId: z.string(),
+  district: z.object({
+    districtId: z.number().or(z.string()),
+    name: z.string(),
+  }),
+  macroRiskAssessment: z.object({
+    score: z.number(),
+    level: z.string(),
+    trendDirection: z.string(),
+  }),
+  emergingAnomalies: z.array(z.object({
+    crimeHeadId: z.number().or(z.string()),
+    historicalMonthlyAverage: z.number(),
+    predictedIncidentCount: z.number(),
+    percentageIncrease: z.number(),
+    alertMessage: z.string(),
+  })),
+  hiddenCorrelations: z.object({
+    socioEconomicDrivers: z.object({
+      urbanizationIndex: z.number(),
+      povertyIndex: z.number(),
+      populationDensity: z.number().or(z.string()),
+      aiInsight: z.string(),
+    }),
+  }),
+  rawQuickMlExplainability: z.any().optional(),
+});
+export const EnrichedPredictionResponseSchema = z.object({
+  timestamp: z.string(),
+  predictions: z.array(EnrichedPredictionSchema),
+});
+export type EnrichedPredictionResponse = z.infer<typeof EnrichedPredictionResponseSchema>;
 
 // ── Socio-Economic Data (GET /api/v1/data/socio-economic) — LIVE backend shape ──
 export const SocioEconomicRecordSchema = z.object({

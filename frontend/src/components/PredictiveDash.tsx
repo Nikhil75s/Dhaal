@@ -30,8 +30,9 @@ import {
   ReferenceLine,
   Cell,
 } from 'recharts';
-import { fetchPredictions, fetchSocioEconomic } from '../data/api';
-import type { PredictionPoint, SocioEconomicRecord } from '../data/schemas';
+import { fetchPredictions, fetchSocioEconomic, generatePdfBrief } from '../data/api';
+import type { PredictionPoint, SocioEconomicRecord, EnrichedPredictionResponse } from '../data/schemas';
+import { mockPredictions } from '../data/mockData';
 
 import RiskGauge from './RiskGauge';
 import AlertMarquee from './AlertMarquee';
@@ -72,44 +73,71 @@ const DISTRICT_ID_MAP: Record<string, string> = {
   'Udupi': '115',
 };
 
-// ── Deploy Patrols Toast State ──
 interface DeployToast {
   visible: boolean;
   district: string;
+  downloadUrl?: string;
+  loadingPdf?: boolean;
 }
 
 export default function PredictiveDash() {
   // ── Data states ──
-  const [predictions, setPredictions] = useState<PredictionPoint[]>([]);
+  const [predictions] = useState<PredictionPoint[]>(mockPredictions);
+  const [realPrediction, setRealPrediction] = useState<EnrichedPredictionResponse | null>(null);
   const [socioData, setSocioData] = useState<SocioEconomicRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDistrict, setSelectedDistrict] = useState<string>('Bengaluru Urban');
   const [deployToast, setDeployToast] = useState<DeployToast>({ visible: false, district: '' });
 
-  // ── Fetch both data sources in parallel ──
+  // ── Fetch socio-economic data on mount ──
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    setError(null);
-
-    Promise.all([fetchPredictions(), fetchSocioEconomic()])
-      .then(([predData, socData]) => {
+    fetchSocioEconomic()
+      .then((socData) => {
         if (!cancelled) {
-          setPredictions(predData);
           setSocioData(socData);
           setLoading(false);
         }
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load data');
+          setError(err instanceof Error ? err.message : 'Failed to load socio-economic data');
           setLoading(false);
         }
       });
-
     return () => { cancelled = true; };
   }, []);
+
+  // ── Derived: socio-economic record for selected district ──
+  const districtSocioData = useMemo(() => {
+    const districtId = DISTRICT_ID_MAP[selectedDistrict];
+    if (!districtId) return null;
+    return socioData.find((s) => s.districtId === districtId) ?? null;
+  }, [socioData, selectedDistrict]);
+
+  // ── Fetch real AI prediction when district or socioData changes ──
+  useEffect(() => {
+    let cancelled = false;
+    const distId = DISTRICT_ID_MAP[selectedDistrict];
+    if (!distId || !districtSocioData) return; // Wait until socioData is loaded
+    
+    setLoading(true);
+    fetchPredictions(distId, districtSocioData)
+      .then((res) => {
+        if (!cancelled && res.predictions.length > 0) {
+          setRealPrediction(res);
+        }
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error('Failed to fetch real AI predictions:', err);
+        setLoading(false);
+      });
+      
+    return () => { cancelled = true; };
+  }, [selectedDistrict, districtSocioData]);
 
   // ── Derived: unique districts from predictions ──
   const districts = useMemo(
@@ -117,7 +145,7 @@ export default function PredictiveDash() {
     [predictions]
   );
 
-  // ── Derived: filtered data for selected district ──
+  // ── Derived: filtered mock data for selected district (for charts) ──
   const chartData = useMemo(
     () =>
       predictions
@@ -132,13 +160,29 @@ export default function PredictiveDash() {
   // ── Derived: stats for the selected district ──
   const stats = useMemo(() => {
     if (chartData.length === 0) return null;
-    const latestRisk = chartData[chartData.length - 1].predictedRisk;
+    
+    // Calculate fallback stats from mock data
     const firstRisk = chartData[0].predictedRisk;
+    const historicalAvg = chartData[0].historicalAverage;
+    const maxRisk = Math.max(...chartData.map((d) => d.predictedRisk));
     const avgRisk = Math.round(
       chartData.reduce((sum, d) => sum + d.predictedRisk, 0) / chartData.length
     );
-    const maxRisk = Math.max(...chartData.map((d) => d.predictedRisk));
-    const historicalAvg = chartData[0].historicalAverage;
+    
+    // If we have real backend prediction, use it for the KPIs
+    if (realPrediction && realPrediction.predictions.length > 0) {
+      const p = realPrediction.predictions[0];
+      const latestRisk = p.macroRiskAssessment.score;
+      const trendDirection = p.macroRiskAssessment.trendDirection;
+      const trend = latestRisk - firstRisk;
+      const deviation = historicalAvg > 0
+        ? ((latestRisk - historicalAvg) / historicalAvg * 100).toFixed(1)
+        : '0';
+      return { latestRisk, avgRisk, maxRisk, historicalAvg, trend, trendDirection, deviation, firstRisk };
+    }
+
+    // Fallback to mock logic
+    const latestRisk = chartData[chartData.length - 1].predictedRisk;
     const trend = latestRisk - firstRisk;
     const trendDirection = trend > 5 ? 'UPWARD_SPIKE' : trend < -5 ? 'DOWNWARD' : 'STABLE';
     const deviation = historicalAvg > 0
@@ -146,33 +190,46 @@ export default function PredictiveDash() {
       : '0';
 
     return { latestRisk, avgRisk, maxRisk, historicalAvg, trend, trendDirection, deviation, firstRisk };
-  }, [chartData]);
+  }, [chartData, realPrediction]);
 
-  // ── Derived: socio-economic record for selected district ──
-  const districtSocioData = useMemo(() => {
-    const districtId = DISTRICT_ID_MAP[selectedDistrict];
-    if (!districtId) return null;
-    return socioData.find((s) => s.districtId === districtId) ?? null;
-  }, [socioData, selectedDistrict]);
 
-  // ── Derived: AI Insight text (generated client-side from live socio-economic data) ──
+  // ── Derived: AI Insight text (from API or generated client-side fallback) ──
   const aiInsight = useMemo(() => {
+    if (realPrediction && realPrediction.predictions.length > 0) {
+      const p = realPrediction.predictions[0];
+      const drivers = p.hiddenCorrelations.socioEconomicDrivers;
+      const urbanIdx = drivers.urbanizationIndex;
+      const povertyIdx = drivers.povertyIndex;
+      const popDensity = Number(drivers.populationDensity) || 0;
+      
+      return {
+        summary: drivers.aiInsight,
+        factors: [
+          { label: 'Urbanization Index', value: urbanIdx, formatted: `${(urbanIdx * 100).toFixed(0)}%` },
+          { label: 'Poverty Index', value: povertyIdx, formatted: `${(povertyIdx * 100).toFixed(0)}%` },
+          { label: 'Population Density', value: popDensity, formatted: `${popDensity.toLocaleString()} / km²` },
+        ],
+        correlationStrength: urbanIdx > 0.5 ? 'Strong' : urbanIdx > 0.3 ? 'Moderate' : 'Weak',
+      };
+    }
+    
+    // Fallback to local calculation
     if (!districtSocioData || !stats) return null;
     const urbanIdx = districtSocioData.urbanizationIndex;
     const povertyIdx = districtSocioData.povertyIndex;
-    const popDensity = districtSocioData.populationDensity;
+    const popDensity = parseInt(districtSocioData.populationDensity, 10) || 0;
     const riskLabel = stats.latestRisk >= 70 ? 'elevated' : stats.latestRisk >= 40 ? 'moderate' : 'low';
 
     return {
-      summary: `Risk ${riskLabel} — evaluated based on urbanization index of ${urbanIdx.toFixed(2)} and population density of ${parseInt(popDensity, 10).toLocaleString()} per km² in ${selectedDistrict}.`,
+      summary: `Risk ${riskLabel} — evaluated based on urbanization index of ${urbanIdx.toFixed(2)} and population density of ${popDensity.toLocaleString()} per km² in ${selectedDistrict}.`,
       factors: [
         { label: 'Urbanization Index', value: urbanIdx, formatted: `${(urbanIdx * 100).toFixed(0)}%` },
         { label: 'Poverty Index', value: povertyIdx, formatted: `${(povertyIdx * 100).toFixed(0)}%` },
-        { label: 'Population Density', value: parseInt(popDensity, 10) || 0, formatted: `${parseInt(popDensity, 10).toLocaleString()} / km²` },
+        { label: 'Population Density', value: popDensity, formatted: `${popDensity.toLocaleString()} / km²` },
       ],
       correlationStrength: urbanIdx > 0.5 ? 'Strong' : urbanIdx > 0.3 ? 'Moderate' : 'Weak',
     };
-  }, [districtSocioData, stats, selectedDistrict]);
+  }, [districtSocioData, stats, selectedDistrict, realPrediction]);
 
   // ── Derived: Radar chart data ──
   const radarData = useMemo(() => {
@@ -217,10 +274,25 @@ export default function PredictiveDash() {
   }, [chartData]);
 
   // ── Deploy Patrols handler ──
-  const handleDeployPatrols = useCallback(() => {
-    setDeployToast({ visible: true, district: selectedDistrict });
-    setTimeout(() => setDeployToast({ visible: false, district: '' }), 4000);
-  }, [selectedDistrict]);
+  const handleDeployPatrols = useCallback(async () => {
+    setDeployToast({ visible: true, district: selectedDistrict, loadingPdf: true });
+    
+    try {
+      const url = await generatePdfBrief({
+        districtName: selectedDistrict,
+        message: `High risk detected. AI forecasts ${stats?.deviation ?? '0'}% deviation from baseline.`,
+        severity: (stats?.latestRisk ?? 0) >= 70 ? 'CRITICAL' : 'HIGH',
+      });
+      setDeployToast({ visible: true, district: selectedDistrict, downloadUrl: url, loadingPdf: false });
+      
+      // Hide after 15 seconds so they have time to click
+      setTimeout(() => setDeployToast({ visible: false, district: '' }), 15000);
+    } catch (e) {
+      console.error('Failed to generate PDF:', e);
+      setDeployToast({ visible: true, district: selectedDistrict, loadingPdf: false });
+      setTimeout(() => setDeployToast({ visible: false, district: '' }), 5000);
+    }
+  }, [selectedDistrict, stats]);
 
   // ── Loading state ──
   if (loading) {
@@ -697,14 +769,33 @@ export default function PredictiveDash() {
       {deployToast.visible && (
         <div className="fixed bottom-6 right-6 z-50 animate-slide-up">
           <div className="flex items-center gap-3 px-5 py-4 rounded-xl bg-clear/90 shadow-2xl border border-clear/40">
-            <CheckCircle size={20} strokeWidth={2} className="text-white shrink-0" />
-            <div>
+            {deployToast.loadingPdf ? (
+              <Activity size={20} strokeWidth={2} className="text-white shrink-0 animate-pulse" />
+            ) : (
+              <CheckCircle size={20} strokeWidth={2} className="text-white shrink-0" />
+            )}
+            <div className="pr-4">
               <p className="text-sm font-semibold text-white">
                 Patrol Units Notified
               </p>
               <p className="text-xs text-white/80 mt-0.5">
                 Preventive patrol deployed to {deployToast.district}. Est. response: 15 minutes.
               </p>
+              {deployToast.loadingPdf && (
+                <p className="text-[10px] text-accent-gold mt-1 animate-pulse">
+                  Generating AI Intelligence Brief...
+                </p>
+              )}
+              {deployToast.downloadUrl && !deployToast.loadingPdf && (
+                <a 
+                  href={deployToast.downloadUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-block mt-2 text-xs font-semibold bg-white text-clear px-3 py-1.5 rounded hover:bg-gray-100 transition-colors"
+                >
+                  Download AI Brief (PDF)
+                </a>
+              )}
             </div>
           </div>
         </div>

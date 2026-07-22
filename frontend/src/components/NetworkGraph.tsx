@@ -99,7 +99,7 @@ export default function NetworkGraph() {
     setLoading(true);
     setError(null);
 
-    fetchNetworkSuspects()
+    fetchNetworkSuspects(selectedDistrict || undefined)
       .then((data) => {
         if (!cancelled) {
           setGraphData(data);
@@ -114,7 +114,7 @@ export default function NetworkGraph() {
       });
 
     return () => { cancelled = true; };
-  }, []);
+  }, [selectedDistrict]);
 
   // ── Build link ID helper (for highlight set) ──
   const makeLinkId = useCallback(
@@ -238,15 +238,15 @@ export default function NetworkGraph() {
       ctx.lineWidth = 1;
       ctx.stroke();
 
-      // Label (show when zoomed in enough)
-      if (globalScale > 1.2) {
-        ctx.globalAlpha = isPathMode ? (isInPath ? 0.9 : 0.08) : 0.9;
-        ctx.font = `${Math.max(10 / globalScale, 2.5)}px Inter, sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'top';
-        ctx.fillStyle = '#F3F4F6';
-        ctx.fillText(node.label, x, y + size + 2);
-      }
+      // Label (always show for better readability)
+      ctx.globalAlpha = isPathMode ? (isInPath ? 0.9 : 0.08) : 0.9;
+      // Adjust font size based on zoom, but keep a minimum legible size
+      const fontSize = Math.max(12 / globalScale, 3);
+      ctx.font = `${fontSize}px Inter, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = '#F3F4F6';
+      ctx.fillText(node.label, x, y + size + 2);
 
       ctx.globalAlpha = 1;
     },
@@ -256,9 +256,9 @@ export default function NetworkGraph() {
   // ── Link styling ──
   const getLinkColor = useCallback(
     (link: GraphLink) => {
-      if (highlightLinks.size === 0) return 'rgba(255, 255, 255, 0.12)';
+      if (highlightLinks.size === 0) return 'rgba(255, 255, 255, 0.4)'; // Increased visibility
       const linkId = makeLinkId(getLinkSourceId(link), getLinkTargetId(link));
-      return highlightLinks.has(linkId) ? '#3B82F6' : 'rgba(255, 255, 255, 0.04)';
+      return highlightLinks.has(linkId) ? '#3B82F6' : 'rgba(255, 255, 255, 0.08)';
     },
     [highlightLinks, makeLinkId]
   );

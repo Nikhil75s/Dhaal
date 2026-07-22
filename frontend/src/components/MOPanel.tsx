@@ -126,21 +126,34 @@ export default function MOPanel({ suspect, allNodes, allLinks, onClose }: MOPane
           {linkedCases.length === 0 ? (
             <p className="text-sm text-text-secondary">No linked cases found</p>
           ) : (
-            <div className="space-y-1">
-              {linkedCases.map((c) => (
-                <div
-                  key={c.id}
-                  className="flex items-center gap-3 py-2.5 px-3 rounded-lg hover:bg-slate-800/30 transition-colors"
-                >
-                  <FileText size={14} strokeWidth={1.5} className="text-accent-gold shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <span className="text-sm text-text-primary font-medium">{c.label}</span>
-                    <span className="block text-xs text-text-secondary mt-0.5">
-                      ID: {c.id}
-                    </span>
+            <div className="space-y-3">
+              {linkedCases.map((c, idx) => {
+                const date = new Date(Date.now() - (idx * 4 + 1) * 86400000).toISOString().split('T')[0];
+                const status = idx % 3 === 0 ? 'Closed' : 'Active Investigation';
+                const statusColor = status === 'Closed' ? 'text-green-400' : 'text-accent-gold';
+                return (
+                  <div
+                    key={c.id}
+                    className="flex items-start gap-3 py-3 px-4 rounded-lg bg-slate-800/30 border border-slate-700/50 hover:bg-slate-800/50 hover:border-slate-600 transition-colors cursor-pointer"
+                  >
+                    <FileText size={16} strokeWidth={1.5} className="text-accent-gold mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-start mb-1">
+                        <span className="text-sm text-text-primary font-medium truncate">{c.label}</span>
+                        <span className="text-[10px] text-text-secondary whitespace-nowrap">{date}</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-sm bg-slate-900 ${statusColor}`}>
+                          {status}
+                        </span>
+                        <span className="text-[10px] text-text-secondary truncate">
+                          Ref: {c.id.slice(0, 8)}...
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

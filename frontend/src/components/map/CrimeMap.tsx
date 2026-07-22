@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useDashboard } from "../../context/DashboardContext";
-import { KARNATAKA_DISTRICTS } from "../../utils/districts";
+import { KARNATAKA_DISTRICTS, districtCoords } from "../../utils/districts";
+import { fetchAnomalies, fetchSocioEconomic } from "../../data/api";
 import { TimeLapseScrubber } from "./TimeLapseScrubber";
 import { Loader2 } from "lucide-react";
 import { computeHexBins, hexBinsToGeoJSON, getResolutionForZoom } from "../../utils/hexbins";
@@ -25,6 +26,8 @@ export const CrimeMap = () => {
   const [dataCount, setDataCount] = useState(0);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [rawData, setRawData] = useState<any[]>([]);
+  const [anomalies, setAnomalies] = useState<any[]>([]);
+  const [socioData, setSocioData] = useState<any[]>([]);
   const [isFetchingMapData, setIsFetchingMapData] = useState(false);
   const [currentResolution, setCurrentResolution] = useState(5);
   const [hoveredHex, setHoveredHex] = useState<any>(null);
@@ -178,6 +181,12 @@ export const CrimeMap = () => {
       }
     };
   }, []); // Run once on mount
+
+  // 1.5 Fetch Overlays (Anomalies & Socio-Economic)
+  useEffect(() => {
+    fetchAnomalies().then(setAnomalies).catch(console.error);
+    fetchSocioEconomic().then(setSocioData).catch(console.error);
+  }, []);
 
   // 2. Handle District Drill-down
   useEffect(() => {
@@ -424,6 +433,107 @@ export const CrimeMap = () => {
     currentResolution,
     mapLoaded,
   ]);
+
+  // 5. Plot Overlays (Anomalies & Socio-Economic)
+  useEffect(() => {
+    if (!mapLoaded || !mapInstanceRef.current) return;
+    const map = mapInstanceRef.current;
+
+    // ── Anomalies (Pulsing Red Zones) ──
+    if (anomalies.length > 0) {
+      const geoJson = {
+        type: "FeatureCollection",
+        features: anomalies.map((a: any) => ({
+          type: "Feature",
+          properties: { severity: a.severity, message: a.description },
+          geometry: { type: "Point", coordinates: [a.longitude, a.latitude] }
+        }))
+      };
+
+      if (!map.getSource("anomalies")) {
+        map.addSource("anomalies", { type: "geojson", data: geoJson });
+        
+        // Add a pulsing circle layer
+        map.addLayer({
+          id: "anomalies-pulse",
+          type: "circle",
+          source: "anomalies",
+          paint: {
+            "circle-radius": [
+              "case",
+              ["==", ["get", "severity"], "high"], 25,
+              ["==", ["get", "severity"], "medium"], 15,
+              10
+            ],
+            "circle-color": "rgba(220, 38, 38, 0.4)", // glowing red
+            "circle-stroke-color": "rgba(239, 68, 68, 0.8)",
+            "circle-stroke-width": 2,
+            "circle-blur": 0.5
+          }
+        });
+        
+        // Inner core dot
+        map.addLayer({
+          id: "anomalies-core",
+          type: "circle",
+          source: "anomalies",
+          paint: {
+            "circle-radius": 5,
+            "circle-color": "#ef4444",
+          }
+        });
+      } else {
+        map.getSource("anomalies").setData(geoJson);
+      }
+    }
+
+    // ── Socio-Economic (Choropleth proxy / Bubbles) ──
+    if (socioData.length > 0) {
+      const geoJson = {
+        type: "FeatureCollection",
+        features: socioData.map((s: any) => {
+          const coords = districtCoords(s.districtId);
+          if (!coords) return null;
+          return {
+            type: "Feature",
+            properties: { 
+              district: s.districtId,
+              poverty: s.povertyIndex,
+              urban: s.urbanizationIndex 
+            },
+            geometry: { type: "Point", coordinates: [coords.lng, coords.lat] }
+          };
+        }).filter(Boolean)
+      };
+
+      if (!map.getSource("socio")) {
+        map.addSource("socio", { type: "geojson", data: geoJson });
+        
+        map.addLayer({
+          id: "socio-bubbles",
+          type: "circle",
+          source: "socio",
+          paint: {
+            // Radius scales with urbanization
+            "circle-radius": ["*", ["get", "urban"], 40],
+            // Color scales with poverty (green = low poverty, yellow = mid, red = high poverty)
+            "circle-color": [
+              "interpolate",
+              ["linear"],
+              ["get", "poverty"],
+              0.1, "rgba(34, 197, 94, 0.1)",
+              0.3, "rgba(234, 179, 8, 0.15)",
+              0.6, "rgba(239, 68, 68, 0.2)"
+            ],
+            "circle-stroke-color": "rgba(255, 255, 255, 0.05)",
+            "circle-stroke-width": 1
+          }
+        }); 
+      } else {
+        map.getSource("socio").setData(geoJson);
+      }
+    }
+  }, [mapLoaded, anomalies, socioData]);
 
   return (
     <div className="w-full h-full relative group bg-[#10141f] overflow-hidden">
