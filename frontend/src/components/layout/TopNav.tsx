@@ -1,34 +1,66 @@
-import { Search, Filter } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Maximize, Minimize } from 'lucide-react';
 import { DistrictDropdown } from '../common/DistrictDropdown';
 import { DateRangeDropdown } from '../common/DateRangeDropdown';
+import { TimeOfDayDropdown } from '../common/TimeOfDayDropdown';
+import { PoliceStationDropdown } from '../common/PoliceStationDropdown';
+import { MoreFilters } from '../common/MoreFilters';
 
 export const TopNav = () => {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.getElementById('app-content-area')?.requestFullscreen().catch(err => {
+        console.error("Error attempting to enable fullscreen:", err);
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  };
+
   return (
-    <header className="h-16 bg-[#0B1120] border-b border-white/10 flex items-center px-8 justify-between z-[10000] relative shadow-[0_4px_32px_rgba(0,0,0,0.8)]">
+    <header className="h-16 bg-[#0F172A] flex items-center px-6 justify-between z-[10000] relative shadow-md shadow-black/20">
       
-      {/* Global Search */}
-      <div className="flex items-center bg-[#151B2B] rounded-full px-4 py-2 w-96 border border-white/10 focus-within:border-khaki/50 transition-all duration-300 shadow-inner">
-        <Search size={18} className="text-gray-400 mr-3" />
-        <input 
-          type="text" 
-          placeholder="Search suspects, FIRs, locations..." 
-          className="bg-transparent border-none outline-none text-sm w-full text-gray-100 placeholder-gray-500"
-        />
-      </div>
+      {/* Spacer for left side if logo is in sidebar, or we just push everything right */}
+      <div className="flex-1" />
 
-      {/* Filter Section */}
-      <div className="flex items-center space-x-4">
-        
-        <DateRangeDropdown />
-        
-        <DistrictDropdown />
-        
-        <button className="bg-khaki text-navy-900 px-5 py-2 rounded-full font-semibold text-sm hover:bg-[#E5BE4A] transition-colors flex items-center shadow-lg shadow-khaki/20">
-          <Filter size={16} className="mr-2" />
-          More Filters
-        </button>
-      </div>
+      <div className="flex items-center">
+        {/* Primary Geo/Time Filters */}
+        <div className="flex items-center space-x-3">
+          <DistrictDropdown />
+          <PoliceStationDropdown />
+          <DateRangeDropdown />
+          <TimeOfDayDropdown />
+        </div>
 
+        {/* Vertical Divider for Spacing */}
+        <div className="w-px h-8 bg-slate-700 mx-5" />
+
+        {/* Secondary Filters & Actions */}
+        <div className="flex items-center space-x-3 shrink-0">
+          <MoreFilters />
+          
+          <button 
+            onClick={toggleFullscreen}
+            className="bg-[#1E293B] text-gray-300 p-2.5 rounded-full hover:bg-slate-700 transition-colors shadow-md shadow-black/30 border border-white/5"
+            title={isFullscreen ? "Exit Fullscreen" : "Fullscreen Map"}
+          >
+            {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+          </button>
+        </div>
+      </div>
+      
     </header>
   );
 };

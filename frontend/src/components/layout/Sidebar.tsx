@@ -6,7 +6,7 @@ export const Sidebar = () => {
   const { activeView, setActiveView } = useDashboard();
 
   return (
-    <aside className="w-20 bg-[#0B1120] flex flex-col items-center py-6 border-r border-white/10 z-20 shadow-[4px_0_32px_rgba(0,0,0,0.8)] relative">
+    <aside className="w-20 bg-[#0F172A] flex flex-col items-center py-6 z-20 shadow-xl shadow-black/20 relative">
       <div className="mb-10">
         <img src={logo} alt="Crime Analytics" className="w-12 h-12 object-contain" />
       </div>
@@ -28,7 +28,7 @@ export const Sidebar = () => {
 const NavItem = ({ icon, label, active = false, onClick }: { icon: React.ReactNode; label: string; active?: boolean; onClick?: () => void }) => {
   return (
     <button onClick={onClick} className={`flex flex-col items-center justify-center w-full py-3 group transition-colors duration-200 rounded-xl cursor-pointer ${active ? 'text-khaki' : 'text-gray-400 hover:text-gray-100'}`}>
-      <div className={`p-2 rounded-lg transition-colors ${active ? 'bg-khaki/10 text-khaki' : 'group-hover:bg-navy-800'}`}>
+      <div className={`p-2 rounded-lg transition-colors ${active ? 'bg-[#1E293B] text-khaki' : 'group-hover:bg-[#1E293B]'}`}>
         {icon}
       </div>
       <span className="text-[10px] font-medium mt-1 uppercase tracking-widest">{label}</span>
