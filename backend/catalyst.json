@@ -1,0 +1,12 @@
+{
+  "functions": {
+    "targets": [
+      "spatial_api",
+      "network_api",
+      "reports_api",
+      "ai_integration_api"
+    ],
+    "ignore": [],
+    "source": "functions"
+  }
+}

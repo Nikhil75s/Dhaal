@@ -1,49 +1,41 @@
-// Catalyst serverless entry point for socio_economic_api.
-// This file is the runtime adapter for the official Catalyst basicIO model.
-// It extracts request data, delegates to the controller, and writes the response.
+"use strict";
 
-const SocioEconomicController = require('./controllers/socioeconomicController');
-const responseBuilder = require('./utils/responseBuilder');
-const { AppError } = require('./utils/errorHandler');
+const express = require("express");
+const cors = require("cors");
+const catalyst = require("zcatalyst-sdk-node");
 
-const MODULE_NAME = 'socio_economic';
-const controller = new SocioEconomicController();
+const app = express();
+app.use(cors());
+app.use(express.json());
 
-/**
- * Catalyst runtime adapter for the socio_economic_api function.
- *
- * @param {object} context - Catalyst runtime context.
- * @param {object} basicIO - Catalyst basicIO object used for request/response handling.
- * @returns {Promise<void>} Resolves after the response has been written and the runtime has closed.
- */
-module.exports = async function (context, basicIO) {
-  try {
-    // Normalize the Catalyst request object for the controller.
-    const requestData = {
-      arguments: basicIO && typeof basicIO.getAllArguments === 'function'
-        ? basicIO.getAllArguments()
-        : {},
-      raw: basicIO,
-      catalystRequest: context
-    };
+// GET /api/v1/data/socio-economic
+app.get("/api/v1/data/socio-economic", async (req, res) => {
+    try {
+        const catalystApp = catalyst.initialize(req);
+        const zcql = catalystApp.zcql();
 
-    // Delegate to the framework-independent controller.
-    const result = await controller.handleRequest(requestData);
+        const query = `SELECT * FROM SocioEconomicData`;
+        const results = await zcql.executeZCQLQuery(query);
 
-    // Write a consistent success envelope to the Catalyst runtime.
-    basicIO.write(JSON.stringify(
-      responseBuilder.success(result, { module: MODULE_NAME })
-    ));
-  } catch (error) {
-    console.error('SocioEconomic runtime error:', error);
+        // Map it so it's clean for the frontend (handling Catalyst ZCQL casing differences)
+        const formattedData = results.map((row) => {
+            const data = row.SocioEconomicData || {};
+            return {
+                districtId: data.DistrictID || data.districtID || data.DistrictId || data.districtId,
+                urbanizationIndex: data.UrbanizationIndex || data.urbanizationIndex,
+                povertyIndex: data.PovertyIndex || data.povertyIndex,
+                populationDensity: data.PopulationDensity || data.populationDensity
+            };
+        });
 
-    // Format structured AppErrors with their code; fall back to generic for unexpected errors.
-    const errorResponse = error instanceof AppError
-      ? responseBuilder.fromAppError(error, MODULE_NAME)
-      : responseBuilder.error({ module: MODULE_NAME });
+        res.status(200).json(formattedData);
+    } catch (err) {
+        console.error("Error fetching socio-economic data:", err);
+        res.status(500).json({
+            error: "Failed to fetch socio-economic data",
+            details: err.message,
+        });
+    }
+});
 
-    basicIO.write(JSON.stringify(errorResponse));
-  } finally {
-    context.close();
-  }
-};
+module.exports = app;

@@ -1,49 +1,96 @@
-// Catalyst serverless entry point for pdf_generator_api.
-// This file is the runtime adapter for the official Catalyst basicIO model.
-// It extracts request data, delegates to the controller, and writes the response.
+"use strict";
 
-const PdfGeneratorController = require('./controllers/pdfgeneratorController');
-const responseBuilder = require('./utils/responseBuilder');
-const { AppError } = require('./utils/errorHandler');
+const express = require("express");
+const cors = require("cors");
+const catalyst = require("zcatalyst-sdk-node");
 
-const MODULE_NAME = 'pdf_generator';
-const controller = new PdfGeneratorController();
+const app = express();
+app.use(cors());
+app.use(express.json());
 
-/**
- * Catalyst runtime adapter for the pdf_generator_api function.
- *
- * @param {object} context - Catalyst runtime context.
- * @param {object} basicIO - Catalyst basicIO object used for request/response handling.
- * @returns {Promise<void>} Resolves after the response has been written and the runtime has closed.
- */
-module.exports = async function (context, basicIO) {
-  try {
-    // Normalize the Catalyst request object for the controller.
-    const requestData = {
-      arguments: basicIO && typeof basicIO.getAllArguments === 'function'
-        ? basicIO.getAllArguments()
-        : {},
-      raw: basicIO,
-      catalystRequest: context
-    };
+const SMARTBROWZ_TEMPLATE_ID = process.env.SMARTBROWZ_TEMPLATE_ID;
+const BUCKET_NAME = process.env.STRATUS_BUCKET_NAME; 
+const STRATUS_PUBLIC_URL = process.env.STRATUS_PUBLIC_URL;
 
-    // Delegate to the framework-independent controller.
-    const result = await controller.handleRequest(requestData);
+// POST /api/v1/reports/generate
+app.post("/api/v1/reports/generate", async (req, res) => {
+    try {
+        const { districtName, message, severity, alertId } = req.body;
 
-    // Write a consistent success envelope to the Catalyst runtime.
-    basicIO.write(JSON.stringify(
-      responseBuilder.success(result, { module: MODULE_NAME })
-    ));
-  } catch (error) {
-    console.error('PdfGenerator runtime error:', error);
+        if (!districtName || !message || !severity) {
+            return res.status(400).json({ error: "Missing required fields: districtName, message, severity" });
+        }
 
-    // Format structured AppErrors with their code; fall back to generic for unexpected errors.
-    const errorResponse = error instanceof AppError
-      ? responseBuilder.fromAppError(error, MODULE_NAME)
-      : responseBuilder.error({ module: MODULE_NAME });
+        const catalystApp = catalyst.initialize(req);
+        const smartbrowz = catalystApp.smartbrowz();
+        const stratus = catalystApp.stratus();
+        const datastore = catalystApp.datastore();
 
-    basicIO.write(JSON.stringify(errorResponse));
-  } finally {
-    context.close();
-  }
-};
+        // 1. Generate PDF using the Professional SmartBrowz Template
+        console.log("Generating PDF from SmartBrowz Template...");
+        const pdfStream = await smartbrowz.generateFromTemplate(SMARTBROWZ_TEMPLATE_ID.toString(), {
+            template_data: {
+                "District": districtName,
+                "AlertMessage": message,
+                "Severity": severity
+            },
+            output_options: {
+                output_type: 'pdf'
+            }
+        });
+
+        // Convert stream to Buffer
+        const chunks = [];
+        for await (let chunk of pdfStream) {
+            chunks.push(chunk);
+        }
+        const pdfBuffer = Buffer.concat(chunks);
+        console.log("PDF Buffer Generated Successfully!");
+
+        // 2. Upload to Stratus using the official Catalyst SDK
+        const fileName = `intelligence-brief-${districtName.replace(/\s+/g, '-')}-${Date.now()}.pdf`;
+        
+        console.log(`Uploading directly to Stratus bucket: ${BUCKET_NAME}`);
+        
+        // Use bucket() or bucketInstance() depending on SDK version (some versions use .bucket)
+        const bucket = stratus.bucket ? stratus.bucket(BUCKET_NAME) : stratus.bucketInstance(BUCKET_NAME);
+        
+        // Use putObject to upload the Buffer directly to the bucket securely!
+        await bucket.putObject(fileName, pdfBuffer);
+        
+        // Construct the public URL for the frontend
+        const downloadUrl = `${STRATUS_PUBLIC_URL}/${fileName}`;
+        console.log("Successfully uploaded to Stratus:", downloadUrl);
+
+        // 3. Persist the report in Catalyst Data Store
+        if (alertId) {
+            try {
+                await datastore.table('IntelligenceReports').insertRow({
+                    AlertID: alertId,
+                    PdfUrl: downloadUrl,
+                    GeneratedDate: new Date().toISOString().replace('T', ' ').substring(0, 19)
+                });
+                console.log("Saved report metadata to Data Store");
+            } catch (dbErr) {
+                console.error("Failed to save report to DB:", dbErr.message);
+                // We don't fail the request if just DB insert fails, return the URL anyway
+            }
+        }
+
+        // 4. Return the exact Stratus URL to Frontend 2
+        res.status(200).json({
+            status: "success",
+            fileName: fileName,
+            downloadUrl: downloadUrl
+        });
+
+    } catch (err) {
+        console.error("PDF Generator Error:", err.message);
+        res.status(500).json({
+            error: "Failed to generate or upload Intelligence Brief",
+            details: err.message
+        });
+    }
+});
+
+module.exports = app;

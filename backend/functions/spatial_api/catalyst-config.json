@@ -1,6 +1,6 @@
 {
 	"deployment": {
-		"name": "reports_api",
+		"name": "spatial_api",
 		"stack": "node24",
 		"type": "advancedio",
 		"env_variables": {}
