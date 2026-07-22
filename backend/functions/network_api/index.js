@@ -24,7 +24,11 @@ async function fetchPaginated(zcql, queryTemplate, tableName) {
   return allResults;
 }
 
-// Helper to fetch graph data with Cache implementation
+/**
+ * Retrieves the network graph data, using cached data when available and rebuilding it from case, accused, and victim records otherwise.
+ * @param {Object} catalystApp - Catalyst application instance used to access cache and ZCQL services.
+ * @returns {Promise<Object>} The graph data containing `nodes` and `links`.
+ */
 async function getGraphData(catalystApp) {
   const cache = catalystApp.cache();
   const segment = cache.segment();
