@@ -58,6 +58,8 @@ export const NetworkNodeSchema = z.object({
   label: z.string(),
   group: z.string(), // 'case' | 'accused' | 'victim' — kept as string, not enum, since
                       // unrecognized groups should render (blue fallback) not fail validation
+  mo: z.string().optional(),
+  jurisdiction: z.string().optional(),
 });
 
 export const NetworkLinkSchema = z.object({
@@ -74,6 +76,12 @@ export const NetworkGraphSchema = z.object({
 export type NetworkNode = z.infer<typeof NetworkNodeSchema>;
 export type NetworkLink = z.infer<typeof NetworkLinkSchema>;
 export type NetworkGraphData = z.infer<typeof NetworkGraphSchema>;
+
+export const NetworkSearchResultSchema = z.array(NetworkNodeSchema);
+export type NetworkSearchResult = z.infer<typeof NetworkSearchResultSchema>;
+
+export const NetworkExpandResponseSchema = NetworkGraphSchema;
+export type NetworkExpandResponse = z.infer<typeof NetworkExpandResponseSchema>;
 
 export const PredictionPointSchema = z.object({
   district: z.string(),

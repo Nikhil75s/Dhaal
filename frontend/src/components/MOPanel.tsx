@@ -53,12 +53,12 @@ export default function MOPanel({ suspect, allNodes, allLinks, onClose }: MOPane
     (n) => n.group === 'victim' && connectedNodeIds.has(n.id)
   );
 
-  // Derive a primary MO from the relationship labels
-  const moLabels = suspectLinks
-    .map((l) => l.label)
+  // Derive a primary MO from the connected cases (backend now provides 'mo')
+  const moLabels = linkedCases
+    .map((c) => c.mo)
     .filter(Boolean);
   const primaryMO = moLabels.length > 0
-    ? [...new Set(moLabels)].join(', ')
+    ? [...new Set(moLabels)].join(' | ')
     : 'Unknown';
 
   const handleGenerateBrief = useCallback(async () => {
@@ -147,7 +147,7 @@ export default function MOPanel({ suspect, allNodes, allLinks, onClose }: MOPane
                           {status}
                         </span>
                         <span className="text-[10px] text-text-secondary truncate">
-                          Ref: {c.id.slice(0, 8)}...
+                          {c.jurisdiction || `Ref: ${c.id.slice(0, 8)}...`}
                         </span>
                       </div>
                     </div>

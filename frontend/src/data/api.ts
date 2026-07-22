@@ -4,6 +4,8 @@ import {
   AnomalyResponseSchema,
   ReportHistoryResponseSchema,
   NetworkGraphSchema,
+  NetworkSearchResultSchema,
+  NetworkExpandResponseSchema,
   EnrichedPredictionResponseSchema,
   SocioEconomicResponseSchema,
   LiveAnomalyResponseSchema,
@@ -13,6 +15,8 @@ import type {
   Anomaly,
   ReportHistoryItem,
   NetworkGraphData,
+  NetworkSearchResult,
+  NetworkExpandResponse,
   EnrichedPredictionResponse,
   SocioEconomicRecord,
 } from './schemas';
@@ -32,7 +36,7 @@ const USE_MOCK = {
   clusters: true,        // spatial_api is live, but CrimeMap has its own fetch
   anomalies: false,      // ✅ anomaly_alerts_api is LIVE
   reports: false,        // ✅ reports_api is LIVE (returns [] for now)
-  network: false,        // ✅ network_api is LIVE
+  network: true,         // using mocks for F1-F3 since /search is pending
   predictions: false,     // 🔴 ai_predictions_api returns 500 (OAuth error)
   socioEconomic: false,  // ✅ socio_economic_api is LIVE
   pdf: false,            // Backend 2 confirmed it is working properly
@@ -149,7 +153,6 @@ export async function generatePdfBrief(payload: {
   return json.downloadUrl;
 }
 
-// ── Network Suspects Graph ──
 export async function fetchNetworkSuspects(districtId?: string): Promise<NetworkGraphData> {
   if (USE_MOCK.network) {
     return NetworkGraphSchema.parse(mockNetworkGraph);
@@ -159,52 +162,78 @@ export async function fetchNetworkSuspects(districtId?: string): Promise<Network
   if (!res.ok) throw new Error(`Network suspects fetch failed: ${res.status}`);
   const json = await res.json();
   
-  const parsed = NetworkGraphSchema.parse(json);
-  
-  // Deterministically assign districts to nodes (101 to 131) since backend lacks it.
-  const getDistrict = (id: string) => {
-    let hash = 0;
-    for (let i = 0; i < id.length; i++) hash = id.charCodeAt(i) + ((hash << 5) - hash);
-    return String(101 + (Math.abs(hash) % 31));
-  };
-
-  let nodes = parsed.nodes;
-  if (districtId) {
-    nodes = nodes.filter(n => getDistrict(n.id) === districtId);
-  }
-
-  // Sample top nodes for readability
-  if (nodes.length > 50) {
-    nodes = nodes.slice(0, 50);
-  }
-
-  // Separate node types
-  const cases = nodes.filter(n => n.group === 'case');
-  const people = nodes.filter(n => n.group === 'accused' || n.group === 'victim');
-
-  const syntheticLinks = [];
-  
-  // For each person, link them to 1-2 random cases in this subset to form a coherent graph.
-  // This bypasses the backend join-key gap where link targets don't match node IDs.
-  if (cases.length > 0) {
-    for (const person of people) {
-      let hash = 0;
-      for (let i = 0; i < person.id.length; i++) hash = person.id.charCodeAt(i) + ((hash << 5) - hash);
-      const caseCount = 1 + (Math.abs(hash) % 2); // 1 or 2 cases
-      
-      for (let c = 0; c < caseCount; c++) {
-        const targetCase = cases[(Math.abs(hash) + c) % cases.length];
-        syntheticLinks.push({
-          source: person.id,
-          target: targetCase.id,
-          label: person.group === 'accused' ? 'Accused In' : 'Victim In'
-        });
-      }
-    }
-  }
-
-  return { nodes, links: syntheticLinks };
+  return NetworkGraphSchema.parse(json);
 }
+
+export async function fetchNetworkSearch(q: string, types?: string[]): Promise<NetworkSearchResult> {
+  if (USE_MOCK.network) {
+    // Basic mock search filter on existing mock nodes
+    const lowerQ = q.toLowerCase();
+    const results = mockNetworkGraph.nodes.filter(n => n.label.toLowerCase().includes(lowerQ));
+    return NetworkSearchResultSchema.parse(results);
+  }
+
+  const params = new URLSearchParams();
+  params.set('q', q);
+  if (types?.length) params.set('types', types.join(','));
+
+  const res = await fetch(`${CATALYST_BASE}/network_api/api/v1/network/search?${params}`);
+  if (!res.ok) throw new Error(`Network search failed: ${res.status}`);
+  const json = await res.json();
+  
+  return NetworkSearchResultSchema.parse(json);
+}
+
+export async function fetchNetworkExpand(nodeId: string, depth: number = 1): Promise<NetworkExpandResponse> {
+  if (USE_MOCK.network) {
+    // 1-hop expansion: return only links connected to nodeId, and the nodes on those links
+    const connectedLinks = mockNetworkGraph.links.filter(
+      l => l.source === nodeId || l.target === nodeId
+    );
+    const connectedNodeIds = new Set<string>([nodeId]);
+    connectedLinks.forEach(l => {
+      connectedNodeIds.add(typeof l.source === 'string' ? l.source : '');
+      connectedNodeIds.add(typeof l.target === 'string' ? l.target : '');
+    });
+    const connectedNodes = mockNetworkGraph.nodes.filter(n => connectedNodeIds.has(n.id));
+    
+    return NetworkExpandResponseSchema.parse({
+      nodes: connectedNodes,
+      links: connectedLinks
+    });
+  }
+
+  const params = new URLSearchParams();
+  params.set('nodeId', nodeId);
+  params.set('depth', depth.toString());
+
+  const res = await fetch(`${CATALYST_BASE}/network_api/api/v1/network/expand?${params}`);
+  if (!res.ok) throw new Error(`Network expand failed: ${res.status}`);
+  const json = await res.json();
+  
+  // 🛡️ SAFEGUARD: The live backend /expand endpoint currently has a bug where it returns the ENTIRE database.
+  // We must manually filter it to 1-hop here on the frontend so the graph doesn't explode with all nodes.
+  const allLinks = json.links || [];
+  const allNodes = json.nodes || [];
+  
+  const connectedLinks = allLinks.filter(
+    (l: any) => l.source === nodeId || l.target === nodeId || (l.source?.id === nodeId) || (l.target?.id === nodeId)
+  );
+  
+  const connectedNodeIds = new Set<string>([nodeId]);
+  connectedLinks.forEach((l: any) => {
+    connectedNodeIds.add(typeof l.source === 'string' ? l.source : (l.source?.id || ''));
+    connectedNodeIds.add(typeof l.target === 'string' ? l.target : (l.target?.id || ''));
+  });
+  
+  const connectedNodes = allNodes.filter((n: any) => connectedNodeIds.has(n.id));
+  
+  return NetworkExpandResponseSchema.parse({
+    nodes: connectedNodes,
+    links: connectedLinks
+  });
+}
+
 
 // ── Shortest Path ──
 export async function fetchNetworkPath(

@@ -1,11 +1,15 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
-import { Network, TrendingUp, AlertTriangle, Loader, Route, X, Info } from 'lucide-react';
+import { Network, TrendingUp, AlertTriangle, Loader, Route, X } from 'lucide-react';
 import { useDashboard } from '../context/DashboardContext';
-import { fetchNetworkSuspects, fetchNetworkPath } from '../data/api';
+import { fetchNetworkPath, fetchNetworkExpand } from '../data/api';
 import type { NetworkGraphData, NetworkNode } from '../data/schemas';
 import MOPanel from './MOPanel';
 import PredictiveDash from './PredictiveDash';
+import NetworkSearchBar from './network/NetworkSearchBar';
+import NetworkTypeFilters from './network/NetworkTypeFilters';
+import type { NetworkFilters } from './network/NetworkTypeFilters';
+import { nodeColor } from '../utils/networkStyles';
 
 /**
  * NetworkGraph — replaces NetworkGraphSlot.tsx.
@@ -15,20 +19,6 @@ import PredictiveDash from './PredictiveDash';
  *   - Click-to-open MO side panel for accused nodes
  *   - District awareness (visual de-emphasis fallback)
  */
-
-// ── Node color mapping (Section 3 of build brief) ──
-const NODE_COLORS: Record<string, string> = {
-  case: '#D4AF37',     // accent-gold
-  accused: '#EF4444',  // critical (red)
-  victim: '#3B82F6',   // accent-blue
-};
-const nodeColor = (group: string) => NODE_COLORS[group] ?? '#3B82F6';
-
-const GROUP_LABELS: Record<string, string> = {
-  accused: 'Suspects',
-  case: 'Cases',
-  victim: 'Victims',
-};
 
 type TabId = 'graph' | 'predictive';
 
@@ -59,13 +49,18 @@ export default function NetworkGraph() {
   const selectedDistrict = filters.districtId;
 
   // ── Data state ──
-  const [graphData, setGraphData] = useState<NetworkGraphData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [graphData, setGraphData] = useState<NetworkGraphData>({ nodes: [], links: [] });
+  const [loading] = useState(false);
+  const [error] = useState<string | null>(null);
 
   // ── UI state ──
   const [activeTab, setActiveTab] = useState<TabId>('graph');
   const [selectedSuspect, setSelectedSuspect] = useState<NetworkNode | null>(null);
+  const [typeFilters, setTypeFilters] = useState<NetworkFilters>({
+    case: true,
+    accused: true,
+    victim: true,
+  });
 
   // ── Shortest-path state ──
   const [pathSelection, setPathSelection] = useState<string[]>([]);
@@ -73,6 +68,9 @@ export default function NetworkGraph() {
   const [highlightLinks, setHighlightLinks] = useState<Set<string>>(new Set());
   const [pathLoading, setPathLoading] = useState(false);
   const [pathError, setPathError] = useState<string | null>(null);
+  
+  // ── Expand State ──
+  const [isExpanding, setIsExpanding] = useState(false);
 
   // ── Container sizing ──
   const containerRef = useRef<HTMLDivElement>(null);
@@ -93,28 +91,45 @@ export default function NetworkGraph() {
     return () => observer.disconnect();
   }, []);
 
-  // ── Fetch graph data ──
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    fetchNetworkSuspects(selectedDistrict || undefined)
-      .then((data) => {
-        if (!cancelled) {
-          setGraphData(data);
-          setLoading(false);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load network data');
-          setLoading(false);
-        }
+  // ── Graph merging utility ──
+  const mergeGraphData = useCallback((newData: NetworkGraphData) => {
+    setGraphData(prev => {
+      if (!prev) return newData;
+      
+      const newNodesMap = new Map(prev.nodes.map(n => [n.id, n]));
+      newData.nodes.forEach(n => newNodesMap.set(n.id, n));
+      
+      const newLinksMap = new Map(prev.links.map(l => {
+        const sid = typeof l.source === 'object' ? (l.source as any).id : l.source;
+        const tid = typeof l.target === 'object' ? (l.target as any).id : l.target;
+        return [`${sid}-${tid}`, l];
+      }));
+      newData.links.forEach(l => {
+        const sid = typeof l.source === 'object' ? (l.source as any).id : l.source;
+        const tid = typeof l.target === 'object' ? (l.target as any).id : l.target;
+        newLinksMap.set(`${sid}-${tid}`, l);
       });
+      
+      return {
+        nodes: Array.from(newNodesMap.values()),
+        links: Array.from(newLinksMap.values()),
+      };
+    });
+  }, []);
 
-    return () => { cancelled = true; };
-  }, [selectedDistrict]);
+  const handleExpandNode = useCallback(async (nodeId: string) => {
+    if (isExpanding) return;
+    setIsExpanding(true);
+    try {
+      const data = await fetchNetworkExpand(nodeId, 1);
+      mergeGraphData(data);
+    } catch (e) {
+      console.error('Failed to expand node', e);
+    } finally {
+      setIsExpanding(false);
+    }
+  }, [isExpanding, mergeGraphData]);
+
 
   // ── Build link ID helper (for highlight set) ──
   const makeLinkId = useCallback(
@@ -183,6 +198,8 @@ export default function NetworkGraph() {
   }, []);
 
   // ── Node click handler ──
+  const lastClickRef = useRef<{ time: number; nodeId: string | null }>({ time: 0, nodeId: null });
+
   const handleNodeClick = useCallback(
     (node: GraphNode, event: MouseEvent) => {
       // Shift-click = path selection mode
@@ -191,12 +208,24 @@ export default function NetworkGraph() {
         return;
       }
 
+      const now = Date.now();
+      const timeDiff = now - lastClickRef.current.time;
+      const isDoubleClick = timeDiff < 400 && lastClickRef.current.nodeId === node.id;
+      
+      lastClickRef.current = { time: now, nodeId: node.id };
+
+      if (isDoubleClick) {
+        // Expand node on double click
+        handleExpandNode(node.id);
+        return;
+      }
+
       // Regular click on accused node = open MO panel
       if (node.group === 'accused') {
         setSelectedSuspect(node);
       }
     },
-    [handlePathSelect]
+    [handlePathSelect, handleExpandNode]
   );
 
   // ── Custom node rendering ──
@@ -275,11 +304,28 @@ export default function NetworkGraph() {
   // Memoize the graph data object to avoid re-triggering force simulation
   const forceGraphData = useMemo(() => {
     if (!graphData) return { nodes: [], links: [] };
+    
+    // Apply client-side filters
+    const filteredNodes = graphData.nodes.filter(n => {
+      if (n.group === 'case' && !typeFilters.case) return false;
+      if (n.group === 'accused' && !typeFilters.accused) return false;
+      if (n.group === 'victim' && !typeFilters.victim) return false;
+      return true;
+    });
+    
+    const filteredNodeIds = new Set(filteredNodes.map(n => n.id));
+    
+    const filteredLinks = graphData.links.filter(l => {
+      const sid = typeof l.source === 'object' ? (l.source as any).id : l.source;
+      const tid = typeof l.target === 'object' ? (l.target as any).id : l.target;
+      return filteredNodeIds.has(sid) && filteredNodeIds.has(tid);
+    });
+
     return {
-      nodes: graphData.nodes.map((n) => ({ ...n })),
-      links: graphData.links.map((l) => ({ ...l })),
+      nodes: filteredNodes.map((n) => ({ ...n })),
+      links: filteredLinks.map((l) => ({ ...l })),
     };
-  }, [graphData]);
+  }, [graphData, typeFilters]);
 
   // ── Render ──
   return (
@@ -382,34 +428,26 @@ export default function NetworkGraph() {
                 d3VelocityDecay={0.3}
               />
 
-              {/* Legend */}
-              <div className="absolute bottom-4 left-4 glass rounded-xl px-4 py-3 flex items-center gap-4 z-10">
-                {Object.entries(GROUP_LABELS).map(([group, label]) => (
-                  <div key={group} className="flex items-center gap-2">
-                    <div
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: nodeColor(group) }}
-                    />
-                    <span className="text-xs text-text-secondary">{label}</span>
-                  </div>
-                ))}
+              {/* Top controls: Search and Filters */}
+              <div className="absolute top-4 left-4 z-20 flex flex-col gap-3">
+                <NetworkSearchBar 
+                  onSelect={(node) => {
+                    // Seed node and expand, replacing existing graph
+                    setGraphData({ nodes: [node], links: [] });
+                    handleExpandNode(node.id);
+                  }} 
+                />
+                <NetworkTypeFilters 
+                  filters={typeFilters} 
+                  onChange={setTypeFilters} 
+                />
               </div>
 
+              {/* Legend is replaced by interactive filters, but keeping this if needed. Let's remove the static legend since we have filters */}
+
+
               {/* Path mode controls */}
-              <div className="absolute top-4 left-4 z-10 space-y-2">
-                {/* District awareness note */}
-                {selectedDistrict && (
-                  <div className="glass rounded-lg px-3 py-2 flex items-center gap-2 max-w-xs">
-                    <Info size={14} strokeWidth={1.5} className="text-accent-blue shrink-0" />
-                    <p className="text-xs text-text-secondary">
-                      {/* District filtering is a visual cue only — no district field exists on
-                          network nodes. See build brief Section 3 re: join-key gap. Once Backend
-                          Dev 1 adds a district field to the /network/suspects response, this can
-                          become a hard filter. */}
-                      Viewing all districts. "{selectedDistrict}" filter pending backend support.
-                    </p>
-                  </div>
-                )}
+              <div className="absolute bottom-4 left-4 z-10 space-y-2">
 
                 {/* Path selection UI */}
                 {pathSelection.length > 0 && (
@@ -474,11 +512,11 @@ export default function NetworkGraph() {
             </>
           )}
 
-          {!loading && !error && !graphData && (
-            <div className="absolute inset-0 flex items-center justify-center">
+          {!loading && !error && graphData.nodes.length === 0 && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="text-center">
                 <Network size={36} strokeWidth={1} className="text-text-secondary opacity-40 mx-auto mb-3" />
-                <p className="text-sm text-text-secondary">No network data available</p>
+                <p className="text-sm text-text-secondary">Search for a suspect or case to begin exploring</p>
               </div>
             </div>
           )}
