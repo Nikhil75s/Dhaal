@@ -1,10 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
-import { KARNATAKA_DISTRICTS } from '../../utils/districts';
-import { Search, MapPin, ChevronDown } from 'lucide-react';
+import { Search, Building, ChevronDown } from 'lucide-react';
 import { useDashboard } from '../../context/DashboardContext';
 
-export const DistrictDropdown = () => {
-  const { filters, setFilters } = useDashboard();
+export const PoliceStationDropdown = () => {
+  const { filters, setFilters, availableStations } = useDashboard();
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -20,14 +19,15 @@ export const DistrictDropdown = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const filteredDistricts = Object.entries(KARNATAKA_DISTRICTS).filter(([_, district]) =>
-    district.name.toLowerCase().includes(search.toLowerCase())
+  const filteredStations = availableStations.filter(station =>
+    station.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const selectedName = filters.districtId ? KARNATAKA_DISTRICTS[filters.districtId]?.name : 'All Districts';
+  const selectedStation = availableStations.find(s => s.id === filters.policeStationId);
+  const selectedName = selectedStation ? selectedStation.name : 'All Stations';
 
   const handleSelect = (id: string | null) => {
-    setFilters(prev => ({ ...prev, districtId: id, policeStationId: null }));
+    setFilters(prev => ({ ...prev, policeStationId: id }));
     setIsOpen(false);
     setSearch('');
   };
@@ -36,22 +36,22 @@ export const DistrictDropdown = () => {
     <div className="relative" ref={wrapperRef}>
       <div 
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center bg-[#1E293B] px-5 py-2 rounded-full hover:bg-slate-700 transition-colors text-sm cursor-pointer w-56 justify-between shadow-md shadow-black/30 border border-white/5"
+        className="flex items-center bg-[#1E293B] px-5 py-2 rounded-full hover:bg-slate-700 transition-colors text-sm cursor-pointer w-64 justify-between shadow-md shadow-black/30 border border-white/5"
       >
         <div className="flex items-center overflow-hidden">
-          <MapPin size={16} className="text-khaki mr-3 shrink-0" />
+          <Building size={16} className="text-khaki mr-3 shrink-0" />
           <span className="text-gray-200 truncate pr-2">{selectedName}</span>
         </div>
         <ChevronDown size={14} className={`text-gray-400 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </div>
 
       {isOpen && (
-        <div className="absolute top-full mt-2 left-0 w-64 bg-[#1E293B] rounded-xl shadow-xl shadow-black/40 z-50 overflow-hidden border border-white/10">
+        <div className="absolute top-full mt-2 left-0 w-72 bg-[#1E293B] rounded-xl shadow-xl shadow-black/40 z-50 overflow-hidden border border-white/10">
           <div className="p-3 flex items-center bg-[#0F172A]">
             <Search size={14} className="text-gray-400 mx-2 shrink-0" />
             <input
               type="text"
-              placeholder="Search district..."
+              placeholder="Search station..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="bg-transparent border-none outline-none text-sm text-gray-200 w-full placeholder-gray-500 py-1"
@@ -61,21 +61,24 @@ export const DistrictDropdown = () => {
           <div className="max-h-64 overflow-y-auto custom-scrollbar">
             <div 
               onClick={() => handleSelect(null)}
-              className={`px-5 py-2.5 text-sm cursor-pointer hover:bg-[#0F172A] transition-colors ${!filters.districtId ? 'text-khaki bg-[#0F172A] font-medium' : 'text-gray-300'}`}
+              className={`px-5 py-2.5 text-sm cursor-pointer hover:bg-[#0F172A] transition-colors ${!filters.policeStationId ? 'text-khaki bg-[#0F172A] font-medium' : 'text-gray-300'}`}
             >
-              All Districts
+              All Stations
             </div>
-            {filteredDistricts.map(([id, district]) => (
+            {filteredStations.map((station) => (
               <div
-                key={id}
-                onClick={() => handleSelect(id)}
-                className={`px-5 py-2.5 text-sm cursor-pointer hover:bg-[#0F172A] transition-colors ${filters.districtId === id ? 'text-khaki bg-[#0F172A] font-medium' : 'text-gray-300'}`}
+                key={station.id}
+                onClick={() => handleSelect(station.id)}
+                className={`px-5 py-2.5 text-sm cursor-pointer hover:bg-[#0F172A] transition-colors truncate ${filters.policeStationId === station.id ? 'text-khaki bg-[#0F172A] font-medium' : 'text-gray-300'}`}
+                title={station.name}
               >
-                {district.name}
+                {station.name}
               </div>
             ))}
-            {filteredDistricts.length === 0 && (
-              <div className="px-5 py-4 text-sm text-gray-500 text-center bg-transparent">No districts match your search</div>
+            {filteredStations.length === 0 && (
+              <div className="px-5 py-4 text-sm text-gray-500 text-center bg-transparent">
+                {availableStations.length === 0 ? 'Loading stations...' : 'No stations found'}
+              </div>
             )}
           </div>
         </div>
