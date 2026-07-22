@@ -110,19 +110,6 @@ async function getGraphData(catalystApp) {
   return graphData;
 }
 
-// GET /api/v1/network/suspects
-app.get("/api/v1/network/suspects", async (req, res) => {
-  try {
-    const catalystApp = catalyst.initialize(req);
-    const graphData = await getGraphData(catalystApp);
-    res.status(200).json(graphData);
-  } catch (err) {
-    console.error(err);
-    res
-      .status(500)
-      .json({ error: "Failed to fetch network graph", details: err.message });
-  }
-});
 
 // GET /api/v1/network/path
 app.get("/api/v1/network/path", async (req, res) => {
@@ -205,6 +192,208 @@ app.get("/api/v1/network/path", async (req, res) => {
     res
       .status(500)
       .json({ error: "Failed to calculate path", details: err.message });
+  }
+});
+
+// GET /network/repeat-offenders (and /api/v1/network/repeat-offenders)
+app.get(["/api/v1/network/repeat-offenders", "/network/repeat-offenders"], async (req, res) => {
+  try {
+    const { districtIds, policeStationIds, startDate, endDate } = req.query;
+    const catalystApp = catalyst.initialize(req);
+    const zcql = catalystApp.zcql();
+
+    // 1. Build CaseMaster filter query
+    let caseFilters = [];
+    if (districtIds) {
+      const dIds = districtIds.split(",").map(id => id.trim()).join(",");
+      caseFilters.push(`DistrictID IN (${dIds})`);
+    }
+    if (policeStationIds) {
+      const pIds = policeStationIds.split(",").map(id => id.trim()).join(",");
+      caseFilters.push(`PoliceStationID IN (${pIds})`);
+    }
+    if (startDate) {
+      caseFilters.push(`CrimeRegisteredDate >= '${startDate}'`);
+    }
+    if (endDate) {
+      caseFilters.push(`CrimeRegisteredDate <= '${endDate}'`);
+    }
+
+    let caseQueryTemplate = `SELECT CaseMasterID, CrimeNo, PoliceStationID, CrimeMinorHeadID FROM CaseMaster`;
+    if (caseFilters.length > 0) {
+      caseQueryTemplate += ` WHERE ${caseFilters.join(" AND ")}`;
+    }
+
+    const cases = await fetchPaginated(zcql, caseQueryTemplate, "CaseMaster");
+    
+    if (cases.length === 0) {
+      return res.status(200).json({ nodes: [], links: [] });
+    }
+
+    // Fetch all Accused (safer than massive IN clause) to process in-memory
+    const validCaseIds = new Set(cases.map(c => c.CaseMasterID));
+    const allAccused = await fetchPaginated(
+      zcql,
+      `SELECT AccusedMasterID, AccusedName, CaseMasterID FROM Accused`,
+      "Accused"
+    );
+
+    const relevantAccused = allAccused.filter(a => validCaseIds.has(a.CaseMasterID));
+
+    // 2. Process repeat offenders
+    const accusedCounts = {};
+    const accusedMap = {};
+    relevantAccused.forEach(a => {
+      if (!accusedCounts[a.AccusedMasterID]) {
+        accusedCounts[a.AccusedMasterID] = [];
+        accusedMap[a.AccusedMasterID] = a.AccusedName;
+      }
+      accusedCounts[a.AccusedMasterID].push(a.CaseMasterID);
+    });
+
+    const repeatOffenderIds = Object.keys(accusedCounts).filter(id => accusedCounts[id].length > 1);
+
+    if (repeatOffenderIds.length === 0) {
+      return res.status(200).json({ nodes: [], links: [] });
+    }
+
+    // 3. Lookups for MO and Jurisdiction
+    const crimeSubHeads = await fetchPaginated(zcql, `SELECT CrimeSubHeadID, CrimeHeadName FROM CrimeSubHead`, "CrimeSubHead");
+    const crimeSubHeadMap = {};
+    crimeSubHeads.forEach(cs => {
+      crimeSubHeadMap[cs.CrimeSubHeadID] = cs.CrimeHeadName;
+    });
+
+    const policeStations = await fetchPaginated(zcql, `SELECT PoliceStationID, StationName FROM PoliceStation`, "PoliceStation");
+    const policeStationMap = {};
+    policeStations.forEach(ps => {
+      policeStationMap[ps.PoliceStationID] = ps.StationName;
+    });
+
+    // 4. Build Graph
+    const nodes = [];
+    const links = [];
+    const addedNodes = new Set();
+    const repeatOffenderCaseIds = new Set();
+    
+    repeatOffenderIds.forEach(id => {
+      accusedCounts[id].forEach(caseId => repeatOffenderCaseIds.add(caseId));
+    });
+
+    cases.forEach((c) => {
+      if (!repeatOffenderCaseIds.has(c.CaseMasterID)) return; // Skip isolated cases
+      
+      const id = `C_${c.CaseMasterID}`;
+      nodes.push({ 
+        id, 
+        label: c.CrimeNo, 
+        group: "case",
+        mo: crimeSubHeadMap[c.CrimeMinorHeadID] || "Unknown MO",
+        jurisdiction: policeStationMap[c.PoliceStationID] || "Unknown Station"
+      });
+      addedNodes.add(id);
+    });
+
+    repeatOffenderIds.forEach(id => {
+      const aId = `A_${id}`;
+      nodes.push({ id: aId, label: accusedMap[id], group: "accused" });
+      addedNodes.add(aId);
+
+      // Links to cases
+      accusedCounts[id].forEach(caseId => {
+        links.push({
+          source: aId,
+          target: `C_${caseId}`,
+          label: "Repeat Offender In"
+        });
+      });
+    });
+
+    res.status(200).json({ nodes, links });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch repeat offenders graph", details: err.message });
+  }
+});
+
+// GET /network/search (and /api/v1/network/search)
+app.get(["/api/v1/network/search", "/network/search"], async (req, res) => {
+  try {
+    const { q, types } = req.query;
+    if (!q) {
+      return res.status(400).json({ error: "q query parameter is required" });
+    }
+    const qLower = q.toLowerCase();
+    const typeList = types ? types.split(",").map(t => t.trim().toLowerCase()) : ["case", "accused", "victim"];
+
+    const catalystApp = catalyst.initialize(req);
+    const graphData = await getGraphData(catalystApp);
+
+    const results = graphData.nodes.filter((n) => {
+      if (!typeList.includes(n.group)) return false;
+      if (n.label && n.label.toString().toLowerCase().includes(qLower)) return true;
+      if (n.id && n.id.toLowerCase().includes(qLower)) return true;
+      return false;
+    }).map(n => ({ id: n.id, label: n.label, group: n.group }));
+
+    res.status(200).json(results);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to search network graph", details: err.message });
+  }
+});
+
+// GET /network/expand (and /api/v1/network/expand)
+app.get(["/api/v1/network/expand", "/network/expand"], async (req, res) => {
+  try {
+    const { nodeId, depth } = req.query;
+    if (!nodeId) {
+      return res.status(400).json({ error: "nodeId query parameter is required" });
+    }
+    const maxDepth = depth ? parseInt(depth, 10) : 1;
+
+    const catalystApp = catalyst.initialize(req);
+    const graphData = await getGraphData(catalystApp);
+
+    // Build Adjacency List for undirected graph
+    const adj = {};
+    graphData.nodes.forEach((n) => (adj[n.id] = []));
+    graphData.links.forEach((l) => {
+      if (!adj[l.source]) adj[l.source] = [];
+      if (!adj[l.target]) adj[l.target] = [];
+      adj[l.source].push(l.target);
+      adj[l.target].push(l.source);
+    });
+
+    if (!adj[nodeId]) {
+      return res.status(404).json({ error: "Node not found" });
+    }
+
+    // Breadth-First Search to find nodes within maxDepth
+    const q = [{ id: nodeId, d: 0 }];
+    const visited = new Set([nodeId]);
+    
+    while (q.length > 0) {
+      const { id, d } = q.shift();
+      if (d < maxDepth) {
+        for (const neighbor of adj[id] || []) {
+          if (!visited.has(neighbor)) {
+            visited.add(neighbor);
+            q.push({ id: neighbor, d: d + 1 });
+          }
+        }
+      }
+    }
+
+    const resultNodes = graphData.nodes.filter((n) => visited.has(n.id));
+    const resultLinks = graphData.links.filter(
+      (l) => visited.has(l.source) && visited.has(l.target)
+    );
+
+    res.status(200).json({ nodes: resultNodes, links: resultLinks });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to expand node", details: err.message });
   }
 });
 
