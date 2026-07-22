@@ -24,7 +24,7 @@ export const DateRangeDropdown = () => {
     <div className="relative" ref={wrapperRef}>
       <div 
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center bg-[#151B2B] px-5 py-2 rounded-full border border-white/10 hover:border-khaki/30 transition-colors text-sm cursor-pointer shadow-[0_4px_12px_rgba(0,0,0,0.5)]"
+        className="flex items-center bg-[#1E293B] px-5 py-2 rounded-full hover:bg-slate-700 transition-colors text-sm cursor-pointer shadow-md shadow-black/30 border border-white/5"
       >
         <div className="flex items-center overflow-hidden">
           <Calendar size={16} className="text-khaki mr-3 shrink-0" />
@@ -36,7 +36,7 @@ export const DateRangeDropdown = () => {
       </div>
 
       {isOpen && (
-        <div className="absolute top-full mt-2 left-0 w-72 bg-[#0B1120] border border-white/10 rounded-xl shadow-[0_12px_48px_rgba(0,0,0,0.9)] z-50 p-4">
+        <div className="absolute top-full mt-2 left-0 w-72 bg-[#1E293B] rounded-xl shadow-xl shadow-black/40 z-50 p-4 border border-white/10">
           <div className="flex flex-col space-y-4">
             <CustomDatePicker 
               label="Start Date"

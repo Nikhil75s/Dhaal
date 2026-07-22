@@ -85,9 +85,7 @@ export const TimeLapseScrubber = () => {
 
   return (
     <div 
-      className={`absolute bottom-8 left-1/2 transform transition-transform duration-300 bg-[#0B1120]/95 backdrop-blur-md border border-white/10 rounded-full px-6 py-3 flex items-center space-x-6 shadow-[0_12px_48px_rgba(0,0,0,0.9)] z-20 w-[700px] ${
-        filters.selectedCaseId ? '-translate-x-[calc(50%+192px)]' : '-translate-x-1/2'
-      }`}
+      className="absolute bottom-8 left-1/2 transform -translate-x-1/2 transition-transform duration-300 bg-[#1E293B] rounded-full px-6 py-3 flex items-center space-x-6 shadow-xl shadow-black/40 z-20 w-[700px]"
     >
       
       {/* Controls */}
@@ -116,7 +114,7 @@ export const TimeLapseScrubber = () => {
           <span>{filters.endDate}</span>
         </div>
         
-        <div className="relative h-2 bg-navy-800 rounded-full flex items-center">
+        <div className="relative h-2 bg-[#0F172A] rounded-full flex items-center">
           <div 
             className="absolute top-0 left-0 h-full bg-khaki rounded-full pointer-events-none"
             style={{ width: `${filters.replayDate ? currentProgress : 100}%` }}
@@ -134,7 +132,7 @@ export const TimeLapseScrubber = () => {
       </div>
       
       {/* Speed Control */}
-      <div className="flex items-center border-l border-navy-800 pl-4">
+      <div className="flex items-center border-l border-[#0F172A] pl-4">
         <button 
           onClick={cycleSpeed}
           className="text-xs font-bold text-khaki hover:text-[#E5BE4A] bg-khaki/10 px-2 py-1 rounded transition-colors"

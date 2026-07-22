@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import { useDashboard } from "../../context/DashboardContext";
 import { KARNATAKA_DISTRICTS } from "../../utils/districts";
 import { TimeLapseScrubber } from "./TimeLapseScrubber";
-import { CaseDetailsPanel } from "./CaseDetailsPanel";
 import { Loader2 } from "lucide-react";
+import { computeHexBins, hexBinsToGeoJSON, getResolutionForZoom } from "../../utils/hexbins";
+import { HexTooltip } from "./HexTooltip";
 
 declare global {
   interface Window {
@@ -17,7 +18,7 @@ const API_URL =
   "https://dhaal-60077679458.development.catalystserverless.in/server/spatial_api/api/v1/map/clusters";
 
 export const CrimeMap = () => {
-  const { filters, setFilters } = useDashboard();
+  const { filters, setFilters, setAvailableStations, setAvailableCrimeTypes } = useDashboard();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const markersRef = useRef<any>(null);
@@ -26,6 +27,8 @@ export const CrimeMap = () => {
   const [mapLoaded, setMapLoaded] = useState(false);
   const [rawData, setRawData] = useState<any[]>([]);
   const [isFetchingMapData, setIsFetchingMapData] = useState(false);
+  const [currentResolution, setCurrentResolution] = useState(5);
+  const [hoveredHex, setHoveredHex] = useState<any>(null);
 
   // 1. Initialize Map
   useEffect(() => {
@@ -40,6 +43,7 @@ export const CrimeMap = () => {
             minZoom: 6, // Limit the zoom out
             zoomControl: true,
             location: true,
+            fullscreenControl: false, // Disabled because it hides the TopNav filters
           },
         );
 
@@ -50,7 +54,7 @@ export const CrimeMap = () => {
           }
         });
         resizeObserver.observe(mapContainerRef.current);
-        
+
         // Store observer on the ref so we can disconnect it later
         (mapInstanceRef.current as any)._resizeObserver = resizeObserver;
 
@@ -129,6 +133,13 @@ export const CrimeMap = () => {
           }
 
           setMapLoaded(true);
+
+          mapInstanceRef.current.on('zoomend', () => {
+            if (mapInstanceRef.current) {
+              const zoom = mapInstanceRef.current.getZoom();
+              setCurrentResolution(getResolutionForZoom(zoom));
+            }
+          });
         });
       }
     };
@@ -192,9 +203,31 @@ export const CrimeMap = () => {
     const fetchRawData = async () => {
       setIsFetchingMapData(true);
       try {
-        const response = await fetch(API_URL);
+        const url = `${API_URL}?districtId=${filters.districtId || "all"}&startDate=${filters.startDate}&endDate=${filters.endDate}`;
+        const response = await fetch(url);
         if (!response.ok) throw new Error("Network response was not ok");
         const data = await response.json();
+        
+        // Extract distinct police stations and crime types for the filters
+        const stationsMap = new Map<string, string>();
+        const crimeTypesSet = new Set<string>();
+
+        data.forEach((item: any) => {
+          if (item.PoliceStation?.PoliceStationID) {
+            stationsMap.set(item.PoliceStation.PoliceStationID.toString(), item.PoliceStation.StationName);
+          }
+          if (item.CrimeHead?.CrimeGroupName) {
+            crimeTypesSet.add(item.CrimeHead.CrimeGroupName);
+          }
+        });
+
+        setAvailableStations(
+          Array.from(stationsMap.entries())
+            .map(([id, name]) => ({ id, name }))
+            .sort((a, b) => a.name.localeCompare(b.name))
+        );
+        setAvailableCrimeTypes(Array.from(crimeTypesSet).sort());
+
         setRawData(data);
       } catch (error) {
         console.warn("Backend API not reachable. Falling back to Mock Data.");
@@ -235,7 +268,7 @@ export const CrimeMap = () => {
     };
 
     fetchRawData();
-  }, [filters.districtId, mapLoaded]);
+  }, [filters.districtId, filters.startDate, filters.endDate, mapLoaded]);
 
   // 4. Plot Clusters (Runs highly efficiently on Timeline scrub)
   useEffect(() => {
@@ -262,58 +295,54 @@ export const CrimeMap = () => {
           return false;
         }
 
-        // 2. Date Filter
+        // 2. Police Station Filter
+        if (
+          filters.policeStationId &&
+          String(item.PoliceStation?.PoliceStationID) !== String(filters.policeStationId)
+        ) {
+          return false;
+        }
+
+        // 3. Date & Time Filter
         const dateStr = item.CaseMaster?.CrimeRegisteredDate;
         if (dateStr) {
           // Supports "YYYY-MM-DD" or "YYYY-MM-DD HH:mm:ss"
-          const itemDateMs = new Date(dateStr.replace(" ", "T")).getTime();
+          const itemDate = new Date(dateStr.replace(" ", "T"));
+          const itemDateMs = itemDate.getTime();
           if (
             !isNaN(itemDateMs) &&
             (itemDateMs < startDateMs || itemDateMs > endDateMs)
           ) {
             return false;
           }
+
+          if (filters.timeOfDay !== 'all') {
+            const hour = itemDate.getHours();
+            if (filters.timeOfDay === 'morning' && (hour < 6 || hour >= 14)) return false;
+            if (filters.timeOfDay === 'afternoon' && (hour < 14 || hour >= 22)) return false;
+            if (filters.timeOfDay === 'night' && (hour >= 6 && hour < 22)) return false;
+          }
+
+          if (filters.dayOfWeek) {
+            // JS getDay(): 0 = Sunday, 1 = Monday...
+            const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const dayName = dayNames[itemDate.getDay()];
+            if (dayName !== filters.dayOfWeek) return false;
+          }
         }
+        
+        // 4. Crime Category Filter
+        if (filters.crimeGroup && item.CrimeHead?.CrimeGroupName !== filters.crimeGroup) {
+          return false;
+        }
+
         return true;
       });
 
       setDataCount(filteredData.length);
 
-      // Remove old traditional markers logic since we are migrating to Native Mapbox GL Layers
-      if (markersRef.current && Array.isArray(markersRef.current)) {
-        markersRef.current.forEach((m: any) => m.remove());
-        markersRef.current = [];
-      }
-
-      const geoJsonData = {
-        type: "FeatureCollection",
-        features: filteredData
-          .map((item: any) => {
-            const lat = parseFloat(item.CaseMaster?.latitude);
-            const lng = parseFloat(item.CaseMaster?.longitude);
-
-            if (isNaN(lat) || isNaN(lng)) return null;
-
-            return {
-              type: "Feature",
-              geometry: {
-                type: "Point",
-                coordinates: [lng, lat],
-              },
-              properties: {
-                id: item.CaseMaster?.CaseMasterID,
-                crimeNo: item.CaseMaster?.CrimeNo,
-                crimeGroup: item.CrimeHead?.CrimeGroupName || "Other",
-                date: item.CaseMaster?.CrimeRegisteredDate || "",
-                isViolent:
-                  item.CrimeHead?.CrimeGroupName === "Crimes Against Body"
-                    ? 1
-                    : 0,
-              },
-            };
-          })
-          .filter(Boolean),
-      };
+      const hexBins = computeHexBins(filteredData, currentResolution);
+      const geoJsonData = hexBinsToGeoJSON(hexBins);
 
       const map = mapInstanceRef.current;
 
@@ -323,115 +352,59 @@ export const CrimeMap = () => {
           data: geoJsonData,
         });
 
-        // Add heatmap layer
         map.addLayer({
-          id: "crime-heat",
-          type: "heatmap",
+          id: "crime-hex",
+          type: "fill",
           source: "crimes",
-          maxzoom: 15,
           paint: {
-            "heatmap-weight": 0.2,
-            "heatmap-intensity": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              0,
-              1,
-              9,
-              1.5,
-              12,
-              6,
-              15,
-              12,
-            ],
-            "heatmap-color": [
-              "interpolate",
-              ["linear"],
-              ["heatmap-density"],
-              0,
-              "rgba(0, 0, 0, 0)",
-              0.2,
-              "rgba(194, 65, 12, 0.1)", // dark orange-red, very transparent
-              0.5,
-              "rgba(234, 88, 12, 0.3)", // medium orange
-              0.8,
-              "rgba(249, 115, 22, 0.5)", // bright orange
-              1,
-              "rgba(251, 146, 60, 0.65)", // soft bright orange center, capped opacity
-            ],
-            "heatmap-radius": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              5,
-              25,
-              9,
-              40,
-              15,
-              80,
-            ],
-            "heatmap-opacity": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              13,
-              1,
-              15,
-              0,
-            ],
-          },
-        });
-
-        // Add individual points that fade in as heatmap fades out
-        map.addLayer({
-          id: "crime-point",
-          type: "circle",
-          source: "crimes",
-          minzoom: 13,
-          paint: {
-            "circle-color": [
+            "fill-color": [
               "case",
-              ["==", ["get", "isViolent"], 1],
-              "#ef4444",
-              "#f59e0b",
+              ["==", ["get", "confidence"], "99%"], "rgba(153, 27, 27, 0.7)",   // Red 800
+              ["==", ["get", "confidence"], "95%"], "rgba(220, 38, 38, 0.55)",  // Red 600
+              ["==", ["get", "confidence"], "90%"], "rgba(248, 113, 113, 0.4)", // Red 400
+              "rgba(251, 146, 60, 0.15)" // None/Insignificant (pale orange/grey)
             ],
-            "circle-radius": 5,
-            "circle-stroke-width": 1.5,
-            "circle-stroke-color": "#ffffff",
-            "circle-opacity": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              13,
-              0,
-              14,
-              1,
-            ],
-            "circle-stroke-opacity": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              13,
-              0,
-              14,
-              1,
-            ],
-          },
+            "fill-outline-color": "rgba(255, 255, 255, 0.15)"
+          }
         });
 
-        // Interactive hover states for points
-        map.on("mouseenter", "crime-point", () => {
-          map.getCanvas().style.cursor = "pointer";
+        // Add an additional outline layer for better definition
+        map.addLayer({
+          id: "crime-hex-line",
+          type: "line",
+          source: "crimes",
+          paint: {
+            "line-color": [
+              "case",
+              ["==", ["get", "confidence"], "99%"], "rgba(252, 165, 165, 0.6)",
+              ["==", ["get", "confidence"], "95%"], "rgba(252, 165, 165, 0.4)",
+              ["==", ["get", "confidence"], "90%"], "rgba(252, 165, 165, 0.2)",
+              "rgba(255, 255, 255, 0.15)"
+            ],
+            "line-width": 1
+          }
         });
-        map.on("mouseleave", "crime-point", () => {
+
+        map.on("mousemove", "crime-hex", (e: any) => {
+          if (e.features.length > 0) {
+            const feature = e.features[0];
+            map.getCanvas().style.cursor = "pointer";
+            setHoveredHex({
+              x: e.originalEvent.clientX,
+              y: e.originalEvent.clientY,
+              count: feature.properties.count,
+              crimeTypes: JSON.parse(feature.properties.crimeTypes),
+              confidence: feature.properties.confidence,
+              zScore: feature.properties.giZScore
+            });
+          }
+        });
+
+        map.on("mouseleave", "crime-hex", () => {
           map.getCanvas().style.cursor = "";
+          setHoveredHex(null);
         });
 
-        // Point click to show Case Details Panel
-        map.on("click", "crime-point", (e: any) => {
-          const props = e.features[0].properties;
-          setFilters(prev => ({ ...prev, selectedCaseId: props.id.toString() }));
-        });
       } else {
         // Source already exists, just update the data smoothly
         map.getSource("crimes").setData(geoJsonData);
@@ -445,6 +418,11 @@ export const CrimeMap = () => {
     filters.endDate,
     filters.replayDate,
     filters.districtId,
+    filters.policeStationId,
+    filters.timeOfDay,
+    filters.dayOfWeek,
+    filters.crimeGroup,
+    currentResolution,
     mapLoaded,
   ]);
 
@@ -464,19 +442,19 @@ export const CrimeMap = () => {
         </div>
       )}
 
-      <div className="absolute top-4 left-4 bg-[#0B1120]/90 backdrop-blur-md p-4 rounded-xl border border-white/10 text-sm z-10 opacity-0 group-hover:opacity-100 transition-opacity shadow-[0_4px_32px_rgba(0,0,0,0.8)]">
+      <div className="absolute top-4 left-4 bg-[#1E293B] p-4 rounded-xl shadow-md shadow-black/30 text-sm z-10 opacity-0 group-hover:opacity-100 transition-opacity">
         <p className="text-khaki font-medium mb-1">Active Map State</p>
-        <p className="text-gray-400">
+        <p className="text-gray-300">
           Date: {filters.startDate} to {filters.replayDate || filters.endDate}
         </p>
-        <p className="text-gray-400">Data Points: {dataCount}</p>
-        <div className="mt-2 text-xs font-semibold px-2 py-1 bg-white/10 rounded border border-white/20 inline-block text-gray-200">
+        <p className="text-gray-300">Total Incidents: {dataCount}</p>
+        <div className="mt-3 text-xs font-semibold px-2.5 py-1.5 bg-[#0F172A] rounded-lg text-gray-400 inline-block">
           Powered by Mappls
         </div>
       </div>
 
       <TimeLapseScrubber />
-      <CaseDetailsPanel />
+      {hoveredHex && <HexTooltip {...hoveredHex} />}
     </div>
   );
 };
