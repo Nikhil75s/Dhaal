@@ -90,7 +90,7 @@ export function hexBinsToGeoJSON(hexBins: HexBin[]) {
     type: 'FeatureCollection',
     features: hexBins.map(bin => {
       const boundary = cellToBoundary(bin.hexId);
-      const coordinates = boundary.map(coord => [coord[1], coord[0]]);
+      const coordinates = boundary.map((coord: [number, number]) => [coord[1], coord[0]]);
       coordinates.push([...coordinates[0]]);
 
       return {
