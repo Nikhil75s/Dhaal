@@ -1,4 +1,4 @@
-import { Map, Network, Database, Settings } from 'lucide-react';
+import { Map, Network, Database, FileText, Settings } from 'lucide-react';
 import logo from '../../assets/logo.png';
 import { useDashboard } from '../../context/DashboardContext';
 
@@ -15,6 +15,7 @@ export const Sidebar = () => {
         <NavItem icon={<Map size={24} />} label="Map" active={activeView === 'map'} onClick={() => setActiveView('map')} />
         <NavItem icon={<Network size={24} />} label="Graph" active={activeView === 'network'} onClick={() => setActiveView('network')} />
         <NavItem icon={<Database size={24} />} label="Data" active={activeView === 'data'} onClick={() => setActiveView('data')} />
+        <NavItem icon={<FileText size={24} />} label="Reports" active={activeView === 'reports'} onClick={() => setActiveView('reports')} />
       </nav>
       
       <div className="mt-auto w-full px-2">

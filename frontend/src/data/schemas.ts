@@ -84,3 +84,33 @@ export const PredictionPointSchema = z.object({
 });
 export const PredictionResponseSchema = z.array(PredictionPointSchema);
 export type PredictionPoint = z.infer<typeof PredictionPointSchema>;
+
+// ── Socio-Economic Data (GET /api/v1/data/socio-economic) — LIVE backend shape ──
+export const SocioEconomicRecordSchema = z.object({
+  districtId: z.string(),
+  urbanizationIndex: z.number(),
+  povertyIndex: z.number(),
+  populationDensity: z.string(), // Backend returns string
+});
+export const SocioEconomicResponseSchema = z.array(SocioEconomicRecordSchema);
+export type SocioEconomicRecord = z.infer<typeof SocioEconomicRecordSchema>;
+
+// ── Live Anomaly Alert (GET /api/v1/ai/anomalies) — LIVE backend shape ──
+export const LiveAnomalyAlertSchema = z.object({
+  alert: z.boolean(),
+  districtId: z.number(),
+  message: z.string(),
+  severity: z.string(),
+  pulsingZone: z.object({
+    lat: z.number(),
+    lng: z.number(),
+    radius: z.number(),
+  }),
+});
+export const LiveAnomalyResponseSchema = z.object({
+  status: z.string(),
+  analyzedDistricts: z.number(),
+  anomaliesDetected: z.number(),
+  alerts: z.array(LiveAnomalyAlertSchema),
+});
+export type LiveAnomalyAlert = z.infer<typeof LiveAnomalyAlertSchema>;

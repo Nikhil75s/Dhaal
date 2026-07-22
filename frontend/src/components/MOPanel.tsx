@@ -1,5 +1,7 @@
-import { X, AlertTriangle, FileText } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { X, AlertTriangle, FileText, Loader, Sparkles, Download, ExternalLink } from 'lucide-react';
 import type { NetworkNode, NetworkLink } from '../data/schemas';
+import { generatePdfBrief } from '../data/api';
 
 interface MOPanelProps {
   suspect: NetworkNode;
@@ -18,6 +20,11 @@ interface MOPanelProps {
  * carry only id/label/group, no district. See build brief Section 3 re: join-key gap.
  */
 export default function MOPanel({ suspect, allNodes, allLinks, onClose }: MOPanelProps) {
+  // ── Generate brief state ──
+  const [briefState, setBriefState] = useState<'idle' | 'generating' | 'success' | 'error'>('idle');
+  const [briefUrl, setBriefUrl] = useState<string | null>(null);
+  const [briefError, setBriefError] = useState<string | null>(null);
+
   // Find all links involving this suspect
   const suspectLinks = allLinks.filter(
     (l) => {
@@ -53,6 +60,23 @@ export default function MOPanel({ suspect, allNodes, allLinks, onClose }: MOPane
   const primaryMO = moLabels.length > 0
     ? [...new Set(moLabels)].join(', ')
     : 'Unknown';
+
+  const handleGenerateBrief = useCallback(async () => {
+    setBriefState('generating');
+    setBriefError(null);
+    try {
+      const url = await generatePdfBrief({
+        districtName: 'Karnataka',
+        message: `Intelligence brief for suspect: ${suspect.label}. Linked to ${linkedCases.length} case(s). Primary MO: ${primaryMO}`,
+        severity: 'HIGH',
+      });
+      setBriefUrl(url);
+      setBriefState('success');
+    } catch (err) {
+      setBriefError(err instanceof Error ? err.message : 'Failed to generate brief');
+      setBriefState('error');
+    }
+  }, [suspect.label, linkedCases.length, primaryMO]);
 
   return (
     <div
@@ -143,6 +167,40 @@ export default function MOPanel({ suspect, allNodes, allLinks, onClose }: MOPane
             </div>
           </div>
         )}
+
+        {/* Generate Intelligence Brief */}
+        <div className="pt-4 border-t border-slate-800/50">
+          <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-3">
+            Intelligence Brief
+          </h3>
+          <button
+            onClick={handleGenerateBrief}
+            disabled={briefState === 'generating'}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-accent-gold/15 text-accent-gold hover:bg-accent-gold/25 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+          >
+            {briefState === 'generating' ? (
+              <><Loader size={14} className="animate-spin" /> Generating PDF...</>
+            ) : (
+              <><Sparkles size={14} /> Generate Intelligence Brief</>
+            )}
+          </button>
+
+          {briefState === 'success' && briefUrl && (
+            <a
+              href={briefUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-clear/10 text-clear hover:bg-clear/15 transition-colors"
+            >
+              <Download size={12} /> Download Brief <ExternalLink size={10} />
+            </a>
+          )}
+          {briefState === 'error' && briefError && (
+            <div className="mt-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-critical/10 text-xs text-critical">
+              <AlertTriangle size={12} /> {briefError}
+            </div>
+          )}
+        </div>
 
         {/* Node metadata */}
         <div className="pt-4 border-t border-slate-800/50">
