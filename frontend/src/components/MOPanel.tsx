@@ -1,7 +1,5 @@
-import { useState, useCallback } from 'react';
-import { X, AlertTriangle, FileText, Loader, Sparkles, Download, ExternalLink } from 'lucide-react';
+import { X, FileText } from 'lucide-react';
 import type { NetworkNode, NetworkLink } from '../data/schemas';
-import { generatePdfBrief } from '../data/api';
 
 interface MOPanelProps {
   suspect: NetworkNode;
@@ -20,11 +18,6 @@ interface MOPanelProps {
  * carry only id/label/group, no district. See build brief Section 3 re: join-key gap.
  */
 export default function MOPanel({ suspect, allNodes, allLinks, onClose }: MOPanelProps) {
-  // ── Generate brief state ──
-  const [briefState, setBriefState] = useState<'idle' | 'generating' | 'success' | 'error'>('idle');
-  const [briefUrl, setBriefUrl] = useState<string | null>(null);
-  const [briefError, setBriefError] = useState<string | null>(null);
-
   // Find all links involving this suspect
   const suspectLinks = allLinks.filter(
     (l) => {
@@ -61,23 +54,6 @@ export default function MOPanel({ suspect, allNodes, allLinks, onClose }: MOPane
     ? [...new Set(moLabels)].join(' | ')
     : 'Unknown';
 
-  const handleGenerateBrief = useCallback(async () => {
-    setBriefState('generating');
-    setBriefError(null);
-    try {
-      const url = await generatePdfBrief({
-        districtName: 'Karnataka',
-        message: `Intelligence brief for suspect: ${suspect.label}. Linked to ${linkedCases.length} case(s). Primary MO: ${primaryMO}`,
-        severity: 'HIGH',
-      });
-      setBriefUrl(url);
-      setBriefState('success');
-    } catch (err) {
-      setBriefError(err instanceof Error ? err.message : 'Failed to generate brief');
-      setBriefState('error');
-    }
-  }, [suspect.label, linkedCases.length, primaryMO]);
-
   return (
     <div
       className="absolute top-0 right-0 h-full w-96 glass shadow-2xl border-l border-slate-800 z-30 flex flex-col animate-slide-in"
@@ -88,9 +64,6 @@ export default function MOPanel({ suspect, allNodes, allLinks, onClose }: MOPane
       {/* Header */}
       <div className="flex items-center justify-between p-6 pb-4 border-b border-slate-800/50">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-critical/20 flex items-center justify-center">
-            <AlertTriangle size={20} strokeWidth={1.5} className="text-critical" />
-          </div>
           <div>
             <h2 className="text-lg font-semibold text-text-primary">{suspect.label}</h2>
             <span className="text-xs text-text-secondary uppercase tracking-wider">Suspect Profile</span>
@@ -129,8 +102,6 @@ export default function MOPanel({ suspect, allNodes, allLinks, onClose }: MOPane
             <div className="space-y-3">
               {linkedCases.map((c, idx) => {
                 const date = new Date(Date.now() - (idx * 4 + 1) * 86400000).toISOString().split('T')[0];
-                const status = idx % 3 === 0 ? 'Closed' : 'Active Investigation';
-                const statusColor = status === 'Closed' ? 'text-green-400' : 'text-accent-gold';
                 return (
                   <div
                     key={c.id}
@@ -141,14 +112,6 @@ export default function MOPanel({ suspect, allNodes, allLinks, onClose }: MOPane
                       <div className="flex justify-between items-start mb-1">
                         <span className="text-sm text-text-primary font-medium truncate">{c.label}</span>
                         <span className="text-[10px] text-text-secondary whitespace-nowrap">{date}</span>
-                      </div>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-sm bg-slate-900 ${statusColor}`}>
-                          {status}
-                        </span>
-                        <span className="text-[10px] text-text-secondary truncate">
-                          {c.jurisdiction || `Ref: ${c.id.slice(0, 8)}...`}
-                        </span>
                       </div>
                     </div>
                   </div>
@@ -180,40 +143,6 @@ export default function MOPanel({ suspect, allNodes, allLinks, onClose }: MOPane
             </div>
           </div>
         )}
-
-        {/* Generate Intelligence Brief */}
-        <div className="pt-4 border-t border-slate-800/50">
-          <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-3">
-            Intelligence Brief
-          </h3>
-          <button
-            onClick={handleGenerateBrief}
-            disabled={briefState === 'generating'}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-accent-gold/15 text-accent-gold hover:bg-accent-gold/25 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
-          >
-            {briefState === 'generating' ? (
-              <><Loader size={14} className="animate-spin" /> Generating PDF...</>
-            ) : (
-              <><Sparkles size={14} /> Generate Intelligence Brief</>
-            )}
-          </button>
-
-          {briefState === 'success' && briefUrl && (
-            <a
-              href={briefUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-medium bg-clear/10 text-clear hover:bg-clear/15 transition-colors"
-            >
-              <Download size={12} /> Download Brief <ExternalLink size={10} />
-            </a>
-          )}
-          {briefState === 'error' && briefError && (
-            <div className="mt-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-critical/10 text-xs text-critical">
-              <AlertTriangle size={12} /> {briefError}
-            </div>
-          )}
-        </div>
 
         {/* Node metadata */}
         <div className="pt-4 border-t border-slate-800/50">

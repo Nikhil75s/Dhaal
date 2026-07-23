@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import { Network, TrendingUp, AlertTriangle, Loader, Route, X } from 'lucide-react';
 import { useDashboard } from '../context/DashboardContext';
-import { fetchNetworkPath, fetchNetworkExpand } from '../data/api';
+import { fetchNetworkPath, fetchNetworkExpand, fetchRepeatOffenders } from '../data/api';
 import type { NetworkGraphData, NetworkNode } from '../data/schemas';
 import MOPanel from './MOPanel';
 import PredictiveDash from './PredictiveDash';
@@ -50,8 +50,32 @@ export default function NetworkGraph() {
 
   // ── Data state ──
   const [graphData, setGraphData] = useState<NetworkGraphData>({ nodes: [], links: [] });
-  const [loading] = useState(false);
-  const [error] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // ── Initial Fetch (Repeat Offenders) ──
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    
+    fetchRepeatOffenders(selectedDistrict)
+      .then(data => {
+        if (!cancelled) {
+          setGraphData(data);
+          setLoading(false);
+        }
+      })
+      .catch(err => {
+        if (!cancelled) {
+          console.error("Failed to fetch repeat offenders:", err);
+          setError(err.message);
+          setLoading(false);
+        }
+      });
+      
+    return () => { cancelled = true; };
+  }, [selectedDistrict]);
 
   // ── UI state ──
   const [activeTab, setActiveTab] = useState<TabId>('graph');
@@ -516,7 +540,7 @@ export default function NetworkGraph() {
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="text-center">
                 <Network size={36} strokeWidth={1} className="text-text-secondary opacity-40 mx-auto mb-3" />
-                <p className="text-sm text-text-secondary">Search for a suspect or case to begin exploring</p>
+                <p className="text-sm text-text-secondary">No repeat offenders found for this district. Try searching for a specific case.</p>
               </div>
             </div>
           )}

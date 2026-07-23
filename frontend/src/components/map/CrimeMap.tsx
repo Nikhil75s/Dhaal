@@ -229,38 +229,8 @@ export const CrimeMap = () => {
 
         setRawData(data);
       } catch (error) {
-        console.warn("Backend API not reachable. Falling back to Mock Data.");
-        const baseLat =
-          filters.districtId && KARNATAKA_DISTRICTS[filters.districtId]
-            ? KARNATAKA_DISTRICTS[filters.districtId].lat
-            : 15.3173;
-        const baseLng =
-          filters.districtId && KARNATAKA_DISTRICTS[filters.districtId]
-            ? KARNATAKA_DISTRICTS[filters.districtId].lng
-            : 75.7139;
-        const spread = filters.districtId ? 0.3 : 3.0;
-
-        const mockData = Array.from({ length: 500 }).map((_, i) => ({
-          CaseMaster: {
-            CaseMasterID: i,
-            CrimeNo: `FIR-${2023000 + i}`,
-            latitude: baseLat + (Math.random() - 0.5) * spread,
-            longitude: baseLng + (Math.random() - 0.5) * spread,
-            CrimeRegisteredDate: new Date(
-              Date.now() - Math.floor(Math.random() * 60) * 24 * 60 * 60 * 1000,
-            )
-              .toISOString()
-              .replace("T", " ")
-              .split(".")[0],
-            DistrictID:
-              filters.districtId ||
-              (101 + Math.floor(Math.random() * 31)).toString(),
-          },
-          CrimeHead: {
-            CrimeGroupName: i % 2 === 0 ? "Property Crimes" : "Violent Crimes",
-          },
-        }));
-        setRawData(mockData);
+        console.error("Backend API not reachable.", error);
+        setRawData([]);
       } finally {
         setIsFetchingMapData(false);
       }

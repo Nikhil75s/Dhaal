@@ -20,27 +20,7 @@ import type {
   EnrichedPredictionResponse,
   SocioEconomicRecord,
 } from './schemas';
-import {
-  mockClusters,
-  mockAnomalies,
-  mockReportHistory,
-  mockNetworkGraph,
-} from './mockData';
 import { districtIdToName } from '../utils/districts';
-
-/**
- * Data layer — per-endpoint toggle to switch between mock and real API data.
- * Set individual flags to false as backend endpoints become available.
- */
-const USE_MOCK = {
-  clusters: true,        // spatial_api is live, but CrimeMap has its own fetch
-  anomalies: false,      // ✅ anomaly_alerts_api is LIVE
-  reports: false,        // ✅ reports_api is LIVE (returns [] for now)
-  network: true,         // using mocks for F1-F3 since /search is pending
-  predictions: false,     // 🔴 ai_predictions_api returns 500 (OAuth error)
-  socioEconomic: false,  // ✅ socio_economic_api is LIVE
-  pdf: false,            // Backend 2 confirmed it is working properly
-};
 
 /** Base URL for Catalyst serverless deployment */
 const CATALYST_BASE = '/catalyst/server';
@@ -50,22 +30,6 @@ export async function fetchClusters(
   dateRange?: { start: Date; end: Date },
   crimeCategory?: string
 ): Promise<ClusterPoint[]> {
-  if (USE_MOCK.clusters) {
-    let data = mockClusters;
-    if (dateRange) {
-      data = data.filter((c) =>
-        isWithinInterval(parseISO(c.date), {
-          start: dateRange.start,
-          end: dateRange.end,
-        })
-      );
-    }
-    if (crimeCategory) {
-      data = data.filter((c) => c.category === crimeCategory);
-    }
-    return ClusterResponseSchema.parse(data);
-  }
-
   const params = new URLSearchParams();
   if (dateRange) {
     params.set('start', dateRange.start.toISOString());
@@ -83,10 +47,6 @@ export async function fetchClusters(
 
 // ── Anomalies (with backend→frontend shape transform) ──
 export async function fetchAnomalies(): Promise<Anomaly[]> {
-  if (USE_MOCK.anomalies) {
-    return AnomalyResponseSchema.parse(mockAnomalies);
-  }
-
   const res = await fetch(`${CATALYST_BASE}/anomaly_alerts_api/api/v1/ai/anomalies`);
   if (!res.ok) throw new Error(`Anomaly fetch failed: ${res.status}`);
   const json = await res.json();
@@ -115,10 +75,6 @@ export async function fetchAnomalies(): Promise<Anomaly[]> {
 
 // ── Report History ──
 export async function fetchReportHistory(): Promise<ReportHistoryItem[]> {
-  if (USE_MOCK.reports) {
-    return ReportHistoryResponseSchema.parse(mockReportHistory);
-  }
-
   const res = await fetch(`${CATALYST_BASE}/reports_api/api/v1/reports/history`);
   if (!res.ok) throw new Error(`Report history fetch failed: ${res.status}`);
   const json = await res.json();
@@ -134,12 +90,6 @@ export async function generatePdfBrief(payload: {
   message: string;
   severity: string;
 }): Promise<string> {
-  if (USE_MOCK.pdf) {
-    // Simulate a 1.5s generation delay
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    return `https://storage.example.com/reports/brief-${Date.now()}.pdf`;
-  }
-
   const res = await fetch(`${CATALYST_BASE}/pdf_generator_api/api/v1/reports/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -153,26 +103,20 @@ export async function generatePdfBrief(payload: {
   return json.downloadUrl;
 }
 
-export async function fetchNetworkSuspects(districtId?: string): Promise<NetworkGraphData> {
-  if (USE_MOCK.network) {
-    return NetworkGraphSchema.parse(mockNetworkGraph);
+export async function fetchRepeatOffenders(districtId?: string): Promise<NetworkGraphData> {
+  const params = new URLSearchParams();
+  if (districtId) {
+    params.set('districtIds', districtId);
   }
-
-  const res = await fetch(`${CATALYST_BASE}/network_api/api/v1/network/suspects`);
-  if (!res.ok) throw new Error(`Network suspects fetch failed: ${res.status}`);
+  
+  const res = await fetch(`${CATALYST_BASE}/network_api/api/v1/network/repeat-offenders?${params}`);
+  if (!res.ok) throw new Error(`Network repeat offenders fetch failed: ${res.status}`);
   const json = await res.json();
   
   return NetworkGraphSchema.parse(json);
 }
 
 export async function fetchNetworkSearch(q: string, types?: string[]): Promise<NetworkSearchResult> {
-  if (USE_MOCK.network) {
-    // Basic mock search filter on existing mock nodes
-    const lowerQ = q.toLowerCase();
-    const results = mockNetworkGraph.nodes.filter(n => n.label.toLowerCase().includes(lowerQ));
-    return NetworkSearchResultSchema.parse(results);
-  }
-
   const params = new URLSearchParams();
   params.set('q', q);
   if (types?.length) params.set('types', types.join(','));
@@ -185,24 +129,6 @@ export async function fetchNetworkSearch(q: string, types?: string[]): Promise<N
 }
 
 export async function fetchNetworkExpand(nodeId: string, depth: number = 1): Promise<NetworkExpandResponse> {
-  if (USE_MOCK.network) {
-    // 1-hop expansion: return only links connected to nodeId, and the nodes on those links
-    const connectedLinks = mockNetworkGraph.links.filter(
-      l => l.source === nodeId || l.target === nodeId
-    );
-    const connectedNodeIds = new Set<string>([nodeId]);
-    connectedLinks.forEach(l => {
-      connectedNodeIds.add(typeof l.source === 'string' ? l.source : '');
-      connectedNodeIds.add(typeof l.target === 'string' ? l.target : '');
-    });
-    const connectedNodes = mockNetworkGraph.nodes.filter(n => connectedNodeIds.has(n.id));
-    
-    return NetworkExpandResponseSchema.parse({
-      nodes: connectedNodes,
-      links: connectedLinks
-    });
-  }
-
   const params = new URLSearchParams();
   params.set('nodeId', nodeId);
   params.set('depth', depth.toString());
@@ -234,27 +160,11 @@ export async function fetchNetworkExpand(nodeId: string, depth: number = 1): Pro
   });
 }
 
-
 // ── Shortest Path ──
 export async function fetchNetworkPath(
   source: string,
   target: string
 ): Promise<NetworkGraphData> {
-  if (USE_MOCK.network) {
-    // Simulate path: return a subset of mock data connecting source → shared case → target
-    const pathLinks = mockNetworkGraph.links.filter(
-      (l) =>
-        (l.source === source || l.target === source || l.source === target || l.target === target)
-    );
-    const referencedIds = new Set<string>();
-    for (const link of pathLinks) {
-      referencedIds.add(typeof link.source === 'string' ? link.source : '');
-      referencedIds.add(typeof link.target === 'string' ? link.target : '');
-    }
-    const allPathNodes = mockNetworkGraph.nodes.filter((n) => referencedIds.has(n.id));
-    return NetworkGraphSchema.parse({ nodes: allPathNodes, links: pathLinks });
-  }
-
   const params = new URLSearchParams({ source, target });
   const res = await fetch(`${CATALYST_BASE}/network_api/api/v1/network/path?${params}`);
   if (!res.ok) {
@@ -282,10 +192,6 @@ export async function fetchPredictions(
   districtId: string,
   socioData?: SocioEconomicRecord
 ): Promise<EnrichedPredictionResponse> {
-  if (USE_MOCK.predictions) {
-    return { timestamp: new Date().toISOString(), predictions: [] };
-  }
-
   const payload = {
     DistrictID: parseInt(districtId, 10),
     Month: new Date().getMonth() + 1,
@@ -310,17 +216,6 @@ export async function fetchPredictions(
 
 // ── Socio-Economic Data (NEW — LIVE) ──
 export async function fetchSocioEconomic(): Promise<SocioEconomicRecord[]> {
-  if (USE_MOCK.socioEconomic) {
-    // Fallback to hardcoded mock if needed
-    const { mockSocioEconomicData } = await import('./mockData');
-    return Object.entries(mockSocioEconomicData).map(([, data], i) => ({
-      districtId: String(101 + i),
-      urbanizationIndex: data.urbanization / 100,
-      povertyIndex: 1 - data.literacy / 100,
-      populationDensity: '0',
-    }));
-  }
-
   const res = await fetch(`${CATALYST_BASE}/socio_economic_api/api/v1/data/socio-economic`);
   if (!res.ok) throw new Error(`Socio-economic fetch failed: ${res.status}`);
   const json = await res.json();

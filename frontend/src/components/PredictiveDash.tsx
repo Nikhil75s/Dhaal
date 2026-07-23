@@ -13,26 +13,16 @@ import {
   Minus,
 } from 'lucide-react';
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
   RadarChart,
   Radar,
   PolarGrid,
   PolarAngleAxis,
   PolarRadiusAxis,
-  AreaChart,
-  Area,
-  ReferenceLine,
-  Cell,
+  ResponsiveContainer,
+  Tooltip,
 } from 'recharts';
 import { fetchPredictions, fetchSocioEconomic, generatePdfBrief } from '../data/api';
-import type { PredictionPoint, SocioEconomicRecord, EnrichedPredictionResponse } from '../data/schemas';
-import { mockPredictions } from '../data/mockData';
+import type { SocioEconomicRecord, EnrichedPredictionResponse } from '../data/schemas';
 
 import RiskGauge from './RiskGauge';
 import AlertMarquee from './AlertMarquee';
@@ -44,13 +34,11 @@ import AlertMarquee from './AlertMarquee';
  *   1. Alert Marquee (live anomalies)
  *   2. Risk Score Gauge (semi-circle SVG)
  *   3. Trend Direction Indicator (animated arrow)
- *   4. Historical vs Predicted Bar Chart
- *   5. AI Correlation Insights Panel (using live socio-economic data)
- *   6. Radar Chart (socio-economic footprint)
- *   7. "Deploy Patrols" CTA (proactive policing demo)
- *   8. 14-day Risk Forecast Area Chart (existing, improved)
+ *   4. AI Correlation Insights Panel (using live socio-economic data)
+ *   5. Radar Chart (socio-economic footprint)
+ *   6. "Deploy Patrols" CTA (proactive policing demo)
  *
- * Consumes: GET /api/v1/ai/predictions (mock — backend 500 OAuth)
+ * Consumes: GET /api/v1/ai/predict (LIVE)
  *           GET /api/v1/data/socio-economic (LIVE)
  */
 
@@ -73,6 +61,9 @@ const DISTRICT_ID_MAP: Record<string, string> = {
   'Udupi': '115',
 };
 
+// Districts array derived from the map
+const DISTRICTS = Object.keys(DISTRICT_ID_MAP);
+
 interface DeployToast {
   visible: boolean;
   district: string;
@@ -82,7 +73,6 @@ interface DeployToast {
 
 export default function PredictiveDash() {
   // ── Data states ──
-  const [predictions] = useState<PredictionPoint[]>(mockPredictions);
   const [realPrediction, setRealPrediction] = useState<EnrichedPredictionResponse | null>(null);
   const [socioData, setSocioData] = useState<SocioEconomicRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -121,79 +111,57 @@ export default function PredictiveDash() {
   useEffect(() => {
     let cancelled = false;
     const distId = DISTRICT_ID_MAP[selectedDistrict];
-    if (!distId || !districtSocioData) return; // Wait until socioData is loaded
+    
+    // Only fetch if we have loaded the socioData to send to the AI
+    if (!distId || !districtSocioData) return;
     
     setLoading(true);
     fetchPredictions(distId, districtSocioData)
       .then((res) => {
         if (!cancelled && res.predictions.length > 0) {
           setRealPrediction(res);
+        } else if (!cancelled) {
+          setRealPrediction(null);
         }
         setLoading(false);
       })
       .catch((err) => {
         console.error('Failed to fetch real AI predictions:', err);
-        setLoading(false);
+        if (!cancelled) {
+          setError('Prediction model unavailable for ' + selectedDistrict);
+          setLoading(false);
+        }
       });
       
     return () => { cancelled = true; };
   }, [selectedDistrict, districtSocioData]);
 
-  // ── Derived: unique districts from predictions ──
-  const districts = useMemo(
-    () => [...new Set(predictions.map((p) => p.district))],
-    [predictions]
-  );
-
-  // ── Derived: filtered mock data for selected district (for charts) ──
-  const chartData = useMemo(
-    () =>
-      predictions
-        .filter((p) => p.district === selectedDistrict)
-        .map((p) => ({
-          ...p,
-          dateLabel: p.date.slice(5), // "MM-DD"
-        })),
-    [predictions, selectedDistrict]
-  );
-
-  // ── Derived: stats for the selected district ──
+  // ── Derived: stats for the selected district (PURELY from real backend data) ──
   const stats = useMemo(() => {
-    if (chartData.length === 0) return null;
+    if (!realPrediction || realPrediction.predictions.length === 0) return null;
     
-    // Calculate fallback stats from mock data
-    const firstRisk = chartData[0].predictedRisk;
-    const historicalAvg = chartData[0].historicalAverage;
-    const maxRisk = Math.max(...chartData.map((d) => d.predictedRisk));
-    const avgRisk = Math.round(
-      chartData.reduce((sum, d) => sum + d.predictedRisk, 0) / chartData.length
-    );
+    const p = realPrediction.predictions[0];
+    const latestRisk = p.macroRiskAssessment.score;
+    const trendDirection = p.macroRiskAssessment.trendDirection;
+    const historicalAvg = p.emergingAnomalies[0]?.historicalMonthlyAverage ?? 0;
+    const predictedCount = p.emergingAnomalies[0]?.predictedIncidentCount ?? 0;
     
-    // If we have real backend prediction, use it for the KPIs
-    if (realPrediction && realPrediction.predictions.length > 0) {
-      const p = realPrediction.predictions[0];
-      const latestRisk = p.macroRiskAssessment.score;
-      const trendDirection = p.macroRiskAssessment.trendDirection;
-      const trend = latestRisk - firstRisk;
-      const deviation = historicalAvg > 0
-        ? ((latestRisk - historicalAvg) / historicalAvg * 100).toFixed(1)
-        : '0';
-      return { latestRisk, avgRisk, maxRisk, historicalAvg, trend, trendDirection, deviation, firstRisk };
-    }
-
-    // Fallback to mock logic
-    const latestRisk = chartData[chartData.length - 1].predictedRisk;
-    const trend = latestRisk - firstRisk;
-    const trendDirection = trend > 5 ? 'UPWARD_SPIKE' : trend < -5 ? 'DOWNWARD' : 'STABLE';
+    // Calculate simple deviation from historical
     const deviation = historicalAvg > 0
-      ? ((latestRisk - historicalAvg) / historicalAvg * 100).toFixed(1)
+      ? ((predictedCount - historicalAvg) / historicalAvg * 100).toFixed(1)
       : '0';
 
-    return { latestRisk, avgRisk, maxRisk, historicalAvg, trend, trendDirection, deviation, firstRisk };
-  }, [chartData, realPrediction]);
+    return { 
+      latestRisk, 
+      historicalAvg, 
+      predictedCount,
+      trendDirection, 
+      deviation 
+    };
+  }, [realPrediction]);
 
 
-  // ── Derived: AI Insight text (from API or generated client-side fallback) ──
+  // ── Derived: AI Insight text ──
   const aiInsight = useMemo(() => {
     if (realPrediction && realPrediction.predictions.length > 0) {
       const p = realPrediction.predictions[0];
@@ -213,23 +181,8 @@ export default function PredictiveDash() {
       };
     }
     
-    // Fallback to local calculation
-    if (!districtSocioData || !stats) return null;
-    const urbanIdx = districtSocioData.urbanizationIndex;
-    const povertyIdx = districtSocioData.povertyIndex;
-    const popDensity = parseInt(districtSocioData.populationDensity, 10) || 0;
-    const riskLabel = stats.latestRisk >= 70 ? 'elevated' : stats.latestRisk >= 40 ? 'moderate' : 'low';
-
-    return {
-      summary: `Risk ${riskLabel} — evaluated based on urbanization index of ${urbanIdx.toFixed(2)} and population density of ${popDensity.toLocaleString()} per km² in ${selectedDistrict}.`,
-      factors: [
-        { label: 'Urbanization Index', value: urbanIdx, formatted: `${(urbanIdx * 100).toFixed(0)}%` },
-        { label: 'Poverty Index', value: povertyIdx, formatted: `${(povertyIdx * 100).toFixed(0)}%` },
-        { label: 'Population Density', value: popDensity, formatted: `${popDensity.toLocaleString()} / km²` },
-      ],
-      correlationStrength: urbanIdx > 0.5 ? 'Strong' : urbanIdx > 0.3 ? 'Moderate' : 'Weak',
-    };
-  }, [districtSocioData, stats, selectedDistrict, realPrediction]);
+    return null;
+  }, [realPrediction]);
 
   // ── Derived: Radar chart data ──
   const radarData = useMemo(() => {
@@ -256,22 +209,12 @@ export default function PredictiveDash() {
         fullMark: 100,
       },
       {
-        axis: 'Hist. Average',
+        axis: 'Baseline Avg',
         value: stats?.historicalAvg ?? 0,
         fullMark: 100,
       },
     ];
   }, [districtSocioData, stats]);
-
-  // ── Derived: bar chart data (latest 7 days — historical vs predicted) ──
-  const barChartData = useMemo(() => {
-    return chartData.slice(-7).map((d) => ({
-      date: d.dateLabel,
-      historical: d.historicalAverage,
-      predicted: d.predictedRisk,
-      isHigher: d.predictedRisk > d.historicalAverage,
-    }));
-  }, [chartData]);
 
   // ── Deploy Patrols handler ──
   const handleDeployPatrols = useCallback(async () => {
@@ -285,7 +228,6 @@ export default function PredictiveDash() {
       });
       setDeployToast({ visible: true, district: selectedDistrict, downloadUrl: url, loadingPdf: false });
       
-      // Hide after 15 seconds so they have time to click
       setTimeout(() => setDeployToast({ visible: false, district: '' }), 15000);
     } catch (e) {
       console.error('Failed to generate PDF:', e);
@@ -295,7 +237,7 @@ export default function PredictiveDash() {
   }, [selectedDistrict, stats]);
 
   // ── Loading state ──
-  if (loading) {
+  if (loading && !stats) {
     return (
       <div className="w-full h-full flex items-center justify-center">
         <div className="flex items-center gap-3 text-text-secondary">
@@ -307,7 +249,7 @@ export default function PredictiveDash() {
   }
 
   // ── Error state ──
-  if (error) {
+  if (error && !stats) {
     return (
       <div className="w-full h-full flex items-center justify-center">
         <div className="flex items-center gap-3 p-4 rounded-xl bg-critical/10">
@@ -343,7 +285,7 @@ export default function PredictiveDash() {
               onChange={(e) => setSelectedDistrict(e.target.value)}
               className="appearance-none bg-surface text-text-primary text-sm pl-3 pr-8 py-2 rounded-lg border border-slate-700 focus:border-accent-blue focus:outline-none cursor-pointer"
             >
-              {districts.map((d) => (
+              {DISTRICTS.map((d) => (
                 <option key={d} value={d}>{d}</option>
               ))}
             </select>
@@ -357,7 +299,7 @@ export default function PredictiveDash() {
         {/* ═══════ 2 & 3. GAUGE + TREND + STATS ROW ═══════ */}
         <div className="grid grid-cols-12 gap-4">
           {/* Risk Gauge */}
-          <div className="col-span-3 rounded-xl bg-surface border border-slate-800 p-5 flex flex-col items-center justify-center">
+          <div className="col-span-4 rounded-xl bg-surface border border-slate-800 p-5 flex flex-col items-center justify-center">
             <RiskGauge
               score={stats?.latestRisk ?? 0}
               label="Current Risk Score"
@@ -366,7 +308,7 @@ export default function PredictiveDash() {
           </div>
 
           {/* Trend Direction + Key Metrics */}
-          <div className="col-span-3 rounded-xl bg-surface border border-slate-800 p-5 flex flex-col justify-between">
+          <div className="col-span-4 rounded-xl bg-surface border border-slate-800 p-5 flex flex-col justify-between">
             {/* Trend arrow */}
             <div className="flex items-center gap-3 mb-4">
               <div className={`p-3 rounded-xl ${
@@ -398,7 +340,7 @@ export default function PredictiveDash() {
                     ? 'DE-ESCALATING'
                     : 'STABLE'}
                 </p>
-                <p className="text-xs text-text-secondary">14-Day Trend</p>
+                <p className="text-xs text-text-secondary">Current Trend</p>
               </div>
             </div>
 
@@ -418,159 +360,25 @@ export default function PredictiveDash() {
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-xs text-text-secondary">Hist. Average</span>
-                <span className="text-sm font-medium text-accent-blue">{stats?.historicalAvg}</span>
+                <span className="text-xs text-text-secondary">Historical Monthly Avg</span>
+                <span className="text-sm font-medium text-accent-blue">{stats?.historicalAvg} incidents</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-xs text-text-secondary">Peak (14-day)</span>
-                <span className="text-sm font-medium text-warning">{stats?.maxRisk}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-text-secondary">Trend Δ</span>
-                <span className={`text-sm font-bold ${
-                  (stats?.trend ?? 0) > 0 ? 'text-critical' : (stats?.trend ?? 0) < 0 ? 'text-clear' : 'text-text-secondary'
-                }`}>
-                  {(stats?.trend ?? 0) > 0 ? '+' : ''}{stats?.trend}
-                </span>
+                <span className="text-xs text-text-secondary">Predicted Incidents</span>
+                <span className="text-sm font-medium text-warning">{stats?.predictedCount} incidents</span>
               </div>
             </div>
-          </div>
-
-          {/* Deploy Patrols CTA + Quick Stats */}
-          <div className="col-span-6 grid grid-rows-2 gap-4">
-            {/* Mini stat cards */}
-            <div className="grid grid-cols-4 gap-3">
-              <div className="rounded-xl bg-surface p-3 border border-slate-800">
-                <p className="text-[10px] text-text-secondary uppercase tracking-wider mb-1">Latest Risk</p>
-                <p className={`text-xl font-bold ${
-                  (stats?.latestRisk ?? 0) >= 70 ? 'text-critical' : (stats?.latestRisk ?? 0) >= 40 ? 'text-warning' : 'text-clear'
-                }`}>
-                  {stats?.latestRisk}
-                </p>
-              </div>
-              <div className="rounded-xl bg-surface p-3 border border-slate-800">
-                <p className="text-[10px] text-text-secondary uppercase tracking-wider mb-1">14-Day Avg</p>
-                <p className="text-xl font-bold text-text-primary">{stats?.avgRisk}</p>
-              </div>
-              <div className="rounded-xl bg-surface p-3 border border-slate-800">
-                <p className="text-[10px] text-text-secondary uppercase tracking-wider mb-1">Peak Risk</p>
-                <p className="text-xl font-bold text-warning">{stats?.maxRisk}</p>
-              </div>
-              <div className="rounded-xl bg-surface p-3 border border-slate-800">
-                <p className="text-[10px] text-text-secondary uppercase tracking-wider mb-1">Trend</p>
-                <p className={`text-xl font-bold ${
-                  (stats?.trend ?? 0) > 0 ? 'text-critical' : (stats?.trend ?? 0) < 0 ? 'text-clear' : 'text-text-secondary'
-                }`}>
-                  {(stats?.trend ?? 0) > 0 ? '+' : ''}{stats?.trend}
-                </p>
-              </div>
-            </div>
-
-            {/* 7. DEPLOY PATROLS CTA */}
-            {stats && stats.latestRisk >= 60 && (
-              <div className="rounded-xl bg-critical/5 border border-critical/30 p-4 flex items-center gap-4">
-                <div className="shrink-0 p-2.5 rounded-xl bg-critical/15">
-                  <Siren size={24} strokeWidth={1.5} className="text-critical gauge-pulse" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-text-primary">
-                    Elevated Risk Detected — {selectedDistrict}
-                  </p>
-                  <p className="text-xs text-text-secondary mt-0.5">
-                    AI forecasts {stats.deviation}% deviation from baseline. Recommend preventive action.
-                  </p>
-                </div>
-                <button
-                  onClick={handleDeployPatrols}
-                  className="shrink-0 px-5 py-2.5 rounded-lg text-sm font-semibold bg-accent-gold text-background hover:bg-accent-gold/90 transition-all cursor-pointer flex items-center gap-2 active:scale-95"
-                >
-                  <Shield size={16} strokeWidth={2} />
-                  Deploy Patrols
-                </button>
-              </div>
-            )}
-            {stats && stats.latestRisk < 60 && (
-              <div className="rounded-xl bg-clear/5 border border-clear/20 p-4 flex items-center gap-4">
-                <div className="shrink-0 p-2.5 rounded-xl bg-clear/15">
-                  <Shield size={24} strokeWidth={1.5} className="text-clear" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-text-primary">
-                    Risk Within Normal Range — {selectedDistrict}
-                  </p>
-                  <p className="text-xs text-text-secondary mt-0.5">
-                    No proactive deployment recommended at this time.
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* ═══════ 4 & 5. BAR CHART + AI INSIGHTS ROW ═══════ */}
-        <div className="grid grid-cols-12 gap-4">
-          {/* Historical vs Predicted Bar Chart */}
-          <div className="col-span-7 rounded-xl bg-surface border border-slate-800 p-5">
-            <h3 className="text-sm font-medium text-text-primary mb-1">
-              Historical vs Predicted — Last 7 Days
-            </h3>
-            <p className="text-xs text-text-secondary mb-4">
-              Gray: historical baseline &nbsp;|&nbsp; Colored: AI prediction
-            </p>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={barChartData} barGap={2} barCategoryGap="20%">
-                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                <XAxis
-                  dataKey="date"
-                  stroke="#9CA3AF"
-                  fontSize={11}
-                  tickLine={false}
-                  axisLine={{ stroke: '#1f2937' }}
-                />
-                <YAxis
-                  domain={[0, 100]}
-                  stroke="#9CA3AF"
-                  fontSize={11}
-                  tickLine={false}
-                  axisLine={{ stroke: '#1f2937' }}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#111827',
-                    border: '1px solid #374151',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                    color: '#F3F4F6',
-                  }}
-                  labelStyle={{ color: '#9CA3AF' }}
-                />
-                <Bar dataKey="historical" name="Historical Avg" fill="#374151" radius={[3, 3, 0, 0]} barSize={20} />
-                <Bar dataKey="predicted" name="Predicted Risk" radius={[3, 3, 0, 0]} barSize={20}>
-                  {barChartData.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={entry.isHigher ? '#EF4444' : '#10B981'}
-                      fillOpacity={0.85}
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
           </div>
 
           {/* AI Correlation Insights Panel */}
-          <div className="col-span-5 rounded-xl bg-surface border border-slate-800 p-5 flex flex-col">
+          <div className="col-span-4 rounded-xl bg-surface border border-slate-800 p-5 flex flex-col">
             <h3 className="text-sm font-medium text-text-primary flex items-center gap-2 mb-3">
               <Activity size={16} strokeWidth={1.5} className="text-accent-gold" />
               AI Correlation Insights
             </h3>
-            <p className="text-[10px] text-text-secondary uppercase tracking-wider mb-2">
-              &quot;Why is this happening?&quot;
-            </p>
-
+            
             {aiInsight ? (
               <div className="flex-1 flex flex-col justify-between">
-                {/* AI Insight quote */}
                 <div className="rounded-lg bg-accent-blue/5 border-l-2 border-accent-blue px-4 py-3 mb-4">
                   <p className="text-xs text-text-primary italic leading-relaxed">
                     &quot;{aiInsight.summary}&quot;
@@ -579,8 +387,6 @@ export default function PredictiveDash() {
                     Correlation Strength: {aiInsight.correlationStrength}
                   </p>
                 </div>
-
-                {/* Socio-economic driver values */}
                 <div className="space-y-2.5">
                   {aiInsight.factors.map((factor) => {
                     const pct = factor.label === 'Population Density'
@@ -609,17 +415,17 @@ export default function PredictiveDash() {
             ) : (
               <div className="flex-1 flex items-center justify-center">
                 <p className="text-xs text-text-secondary text-center">
-                  Socio-economic data unavailable for {selectedDistrict}
+                  Insight unavailable
                 </p>
               </div>
             )}
           </div>
         </div>
 
-        {/* ═══════ 6 & 8. RADAR CHART + AREA CHART ROW ═══════ */}
+        {/* ═══════ 6 & 8. RADAR CHART & CTA ROW ═══════ */}
         <div className="grid grid-cols-12 gap-4">
           {/* Radar Chart — Socio-Economic Footprint */}
-          <div className="col-span-5 rounded-xl bg-surface border border-slate-800 p-5">
+          <div className="col-span-6 rounded-xl bg-surface border border-slate-800 p-5">
             <h3 className="text-sm font-medium text-text-primary mb-1">
               Socio-Economic Footprint
             </h3>
@@ -669,100 +475,54 @@ export default function PredictiveDash() {
               </div>
             )}
           </div>
-
-          {/* 14-Day Risk Forecast — Area Chart */}
-          <div className="col-span-7 rounded-xl bg-surface border border-slate-800 p-5">
-            <h3 className="text-sm font-medium text-text-primary mb-1">
-              14-Day Risk Forecast — {selectedDistrict}
-            </h3>
-            <p className="text-xs text-text-secondary mb-3">
-              Predicted risk score vs historical baseline
-            </p>
-            <ResponsiveContainer width="100%" height={260}>
-              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="riskGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#EF4444" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#EF4444" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="avgGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.15} />
-                    <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                <XAxis
-                  dataKey="dateLabel"
-                  stroke="#9CA3AF"
-                  fontSize={11}
-                  tickLine={false}
-                  axisLine={{ stroke: '#1f2937' }}
-                />
-                <YAxis
-                  domain={[0, 100]}
-                  stroke="#9CA3AF"
-                  fontSize={11}
-                  tickLine={false}
-                  axisLine={{ stroke: '#1f2937' }}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#111827',
-                    border: '1px solid #374151',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                    color: '#F3F4F6',
-                  }}
-                  labelStyle={{ color: '#9CA3AF' }}
-                />
-                {stats && (
-                  <ReferenceLine
-                    y={stats.historicalAvg}
-                    stroke="#3B82F6"
-                    strokeDasharray="6 4"
-                    strokeOpacity={0.5}
-                    label={{
-                      value: `Hist. Avg: ${stats.historicalAvg}`,
-                      position: 'insideTopRight',
-                      fill: '#9CA3AF',
-                      fontSize: 10,
-                    }}
-                  />
-                )}
-                <Area
-                  type="monotone"
-                  dataKey="historicalAverage"
-                  stroke="#3B82F6"
-                  strokeWidth={1.5}
-                  fillOpacity={1}
-                  fill="url(#avgGradient)"
-                  name="Historical Average"
-                  dot={false}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="predictedRisk"
-                  stroke="#EF4444"
-                  strokeWidth={2}
-                  fillOpacity={1}
-                  fill="url(#riskGradient)"
-                  name="Predicted Risk"
-                  dot={false}
-                  activeDot={{ r: 4, fill: '#EF4444', stroke: '#111827', strokeWidth: 2 }}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+          
+          <div className="col-span-6 flex flex-col gap-4">
+            {/* 7. DEPLOY PATROLS CTA */}
+            {stats && stats.latestRisk >= 60 && (
+              <div className="rounded-xl bg-critical/5 border border-critical/30 p-6 flex flex-col justify-center h-full gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="shrink-0 p-2.5 rounded-xl bg-critical/15">
+                    <Siren size={32} strokeWidth={1.5} className="text-critical gauge-pulse" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-lg font-semibold text-text-primary">
+                      Elevated Risk Detected — {selectedDistrict}
+                    </p>
+                    <p className="text-sm text-text-secondary mt-1">
+                      AI forecasts {stats.deviation}% deviation from baseline. Recommend preventive action.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleDeployPatrols}
+                  className="w-full mt-4 py-3 rounded-lg text-sm font-semibold bg-accent-gold text-background hover:bg-accent-gold/90 transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-95"
+                >
+                  <Shield size={18} strokeWidth={2} />
+                  Deploy Patrols & Generate Brief
+                </button>
+              </div>
+            )}
+            {stats && stats.latestRisk < 60 && (
+              <div className="rounded-xl bg-clear/5 border border-clear/20 p-6 flex flex-col justify-center h-full gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="shrink-0 p-2.5 rounded-xl bg-clear/15">
+                    <Shield size={32} strokeWidth={1.5} className="text-clear" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-lg font-semibold text-text-primary">
+                      Risk Within Normal Range — {selectedDistrict}
+                    </p>
+                    <p className="text-sm text-text-secondary mt-1">
+                      No proactive deployment recommended at this time.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
+
         </div>
 
-        {/* ═══════ INFO NOTE ═══════ */}
-        <div className="rounded-lg bg-accent-blue/5 border border-accent-blue/20 px-4 py-3">
-          <p className="text-xs text-text-secondary">
-            <span className="text-accent-blue font-medium">Note:</span> Risk predictions use AI models trained on
-            historical FIR data correlated with live socio-economic indicators. Socio-economic data is live from backend.
-            AI Predictions API is pending OAuth configuration — currently using locally generated forecasts.
-          </p>
-        </div>
       </div>
 
       {/* ═══════ DEPLOY PATROLS TOAST ═══════ */}
