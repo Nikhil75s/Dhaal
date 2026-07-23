@@ -51,41 +51,61 @@ app.get("/api/v1/ai/anomalies", async (req, res) => {
     const currentStart = new Date(targetDate);
     currentStart.setDate(targetDate.getDate() - 7);
 
-    const historicalStart = new Date(currentStart);
-    historicalStart.setDate(currentStart.getDate() - 28);
+    // Historical windows: 4 weeks (28 days) broken down into 4 concurrent queries
+    const weekStarts = [];
+    for(let i=1; i<=4; i++) {
+       const d = new Date(currentStart);
+       d.setDate(currentStart.getDate() - (7 * i));
+       weekStarts.push(d); 
+    }
 
     const formatDt = (d) => d.toISOString().replace("T", " ").substring(0, 19);
 
-    // Fetch Crime mappings
-    const subHeads = await fetchPaginated(zcql, `SELECT ROWID, CrimeHeadName FROM CrimeSubHead`, "CrimeSubHead");
+    // 1. Fire all queries concurrently (Massive performance boost)
+    const subHeadPromise = fetchPaginated(zcql, `SELECT ROWID, CrimeHeadName FROM CrimeSubHead`, "CrimeSubHead");
+    const currentPromise = fetchPaginated(zcql, `SELECT DistrictID, CrimeMinorHeadID, latitude, longitude FROM CaseMaster WHERE CrimeRegisteredDate >= '${formatDt(currentStart)}' AND CrimeRegisteredDate <= '${formatDt(targetDate)}'`, "CaseMaster");
+    
+    const weekPromises = weekStarts.map((wStart, idx) => {
+       const wEnd = idx === 0 ? currentStart : weekStarts[idx - 1];
+       const q = `SELECT DistrictID, CrimeMinorHeadID FROM CaseMaster WHERE CrimeRegisteredDate >= '${formatDt(wStart)}' AND CrimeRegisteredDate < '${formatDt(wEnd)}'`;
+       return fetchPaginated(zcql, q, "CaseMaster");
+    });
+
+    const [
+      subHeads, 
+      currentResults, 
+      w1Results, 
+      w2Results, 
+      w3Results, 
+      w4Results
+    ] = await Promise.all([
+       subHeadPromise, 
+       currentPromise, 
+       ...weekPromises
+    ]);
+
+    // 2. Process Crime Mappings
     const subHeadMap = {};
     subHeads.forEach(s => subHeadMap[s.ROWID] = s.CrimeHeadName);
 
-    // 1. Fetch HISTORICAL Cases
-    const historicalQuery = `SELECT DistrictID, CrimeMinorHeadID, CrimeRegisteredDate FROM CaseMaster WHERE CrimeRegisteredDate >= '${formatDt(historicalStart)}' AND CrimeRegisteredDate < '${formatDt(currentStart)}'`;
-    const historicalResults = await fetchPaginated(zcql, historicalQuery, "CaseMaster");
-
+    // 3. Process Historical Data
     const categoryWeeklyCounts = {};
-    historicalResults.forEach((row) => {
-      const dId = row.DistrictID;
-      const cId = row.CrimeMinorHeadID;
-      if (!dId || !cId) return;
+    const processHistorical = (results, weekIndex) => {
+        results.forEach((row) => {
+            const dId = row.DistrictID;
+            const cId = row.CrimeMinorHeadID;
+            if (!dId || !cId) return;
+            const key = `${dId}_${cId}`;
+            if (!categoryWeeklyCounts[key]) categoryWeeklyCounts[key] = [0, 0, 0, 0];
+            categoryWeeklyCounts[key][weekIndex]++;
+        });
+    };
+    processHistorical(w1Results, 0);
+    processHistorical(w2Results, 1);
+    processHistorical(w3Results, 2);
+    processHistorical(w4Results, 3);
 
-      const key = `${dId}_${cId}`;
-      const date = new Date(row.CrimeRegisteredDate.replace(" ", "T"));
-      const daysDiff = Math.floor((currentStart - date) / (1000 * 60 * 60 * 24));
-      const weekIndex = Math.floor(daysDiff / 7);
-
-      if (weekIndex >= 0 && weekIndex < 4) {
-        if (!categoryWeeklyCounts[key]) categoryWeeklyCounts[key] = [0, 0, 0, 0];
-        categoryWeeklyCounts[key][weekIndex]++;
-      }
-    });
-
-    // 2. Fetch CURRENT Cases
-    const currentQuery = `SELECT DistrictID, CrimeMinorHeadID, latitude, longitude FROM CaseMaster WHERE CrimeRegisteredDate >= '${formatDt(currentStart)}' AND CrimeRegisteredDate <= '${formatDt(targetDate)}'`;
-    const currentResults = await fetchPaginated(zcql, currentQuery, "CaseMaster");
-
+    // 4. Process Current Data
     const currentCounts = {};
     const districtLocations = {};
 
@@ -102,7 +122,7 @@ app.get("/api/v1/ai/anomalies", async (req, res) => {
       }
     });
 
-    // 3. Analyze each district + crime category
+    // 5. Analyze each district + crime category
     const anomalies = [];
     const zScoreThreshold = 2.0;
 
