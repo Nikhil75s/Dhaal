@@ -8,7 +8,7 @@ interface PoliceStationDropdownProps {
 }
 
 export const PoliceStationDropdown = ({ value, onChange }: PoliceStationDropdownProps) => {
-  const { filters, setFilters, availableStations } = useDashboard();
+  const { filters, setFilters, availableStations, activeView } = useDashboard();
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -28,7 +28,8 @@ export const PoliceStationDropdown = ({ value, onChange }: PoliceStationDropdown
     station.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const effectiveValue = value !== undefined ? value : filters.policeStationId;
+  const contextStationId = activeView === 'network' ? filters.networkPoliceStationId : filters.policeStationId;
+  const effectiveValue = value !== undefined ? value : contextStationId;
   const selectedStation = availableStations.find(s => s.id === effectiveValue);
   const selectedName = selectedStation ? selectedStation.name : 'All Stations';
 
@@ -36,7 +37,11 @@ export const PoliceStationDropdown = ({ value, onChange }: PoliceStationDropdown
     if (onChange) {
       onChange(id);
     } else {
-      setFilters(prev => ({ ...prev, policeStationId: id }));
+      if (activeView === 'network') {
+        setFilters(prev => ({ ...prev, networkPoliceStationId: id }));
+      } else {
+        setFilters(prev => ({ ...prev, policeStationId: id }));
+      }
     }
     setIsOpen(false);
     setSearch('');

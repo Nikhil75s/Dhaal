@@ -1,7 +1,13 @@
 {
   "functions": {
     "targets": [
-      "anomaly_alerts_api"
+      "network_api",
+      "ai_predictions_api",
+      "anomaly_alerts_api",
+      "pdf_generator_api",
+      "reports_api",
+      "socio_economic_api",
+      "spatial_api"
     ],
     "ignore": [],
     "source": "functions"

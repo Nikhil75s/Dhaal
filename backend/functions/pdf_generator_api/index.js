@@ -15,7 +15,7 @@ const STRATUS_PUBLIC_URL = process.env.STRATUS_PUBLIC_URL;
 // POST /api/v1/reports/generate
 app.post("/api/v1/reports/generate", async (req, res) => {
     try {
-        const { districtName, message, severity, alertId } = req.body;
+        const { districtName, districtId, message, severity, alertId } = req.body;
 
         if (!districtName || !message || !severity) {
             return res.status(400).json({ error: "Missing required fields: districtName, message, severity" });
@@ -62,15 +62,50 @@ app.post("/api/v1/reports/generate", async (req, res) => {
         const downloadUrl = `${STRATUS_PUBLIC_URL}/${fileName}`;
         console.log("Successfully uploaded to Stratus:", downloadUrl);
 
-        // 3. Persist the report in Catalyst Data Store
-        if (alertId) {
+        // 3. Persist the anomaly first if it's a live one without an alertId
+        let finalAlertId = alertId;
+        if (!finalAlertId && districtId) {
             try {
-                await datastore.table('IntelligenceReports').insertRow({
-                    AlertID: alertId,
-                    PdfUrl: downloadUrl,
-                    GeneratedDate: new Date().toISOString().replace('T', ' ').substring(0, 19)
-                });
-                console.log("Saved report metadata to Data Store");
+                const zcql = catalystApp.zcql();
+                const today = new Date().toISOString().split('T')[0];
+                const query = `SELECT ROWID FROM AnomalyAlerts WHERE DistrictID = ${districtId} AND Message = '${message.replace(/'/g, "''")}' AND AlertTimestamp >= '${today} 00:00:00'`;
+                const searchRes = await zcql.executeZCQLQuery(query);
+                
+                if (searchRes && searchRes.length > 0) {
+                    finalAlertId = searchRes[0].AnomalyAlerts.ROWID;
+                    console.log("Reused existing live anomaly from Data Store, ROWID:", finalAlertId);
+                } else {
+                    const insertedAlert = await datastore.table('AnomalyAlerts').insertRow({
+                        DistrictID: districtId,
+                        Severity: severity,
+                        Message: message,
+                        AlertTimestamp: new Date().toISOString().replace('T', ' ').substring(0, 19)
+                    });
+                    finalAlertId = insertedAlert.ROWID;
+                    console.log("Saved new live anomaly to Data Store, ROWID:", finalAlertId);
+                }
+            } catch (alertErr) {
+                console.error("Failed to save or query live anomaly in DB:", alertErr.message);
+            }
+        }
+
+        // 4. Persist the report in Catalyst Data Store
+        if (finalAlertId) {
+            try {
+                const zcql = catalystApp.zcql();
+                const reportQuery = `SELECT ROWID FROM IntelligenceReports WHERE AlertID = ${finalAlertId}`;
+                const reportRes = await zcql.executeZCQLQuery(reportQuery);
+                
+                if (reportRes && reportRes.length > 0) {
+                    console.log("IntelligenceReport already exists for this alert, skipping duplicate insert.");
+                } else {
+                    await datastore.table('IntelligenceReports').insertRow({
+                        AlertID: finalAlertId,
+                        PdfUrl: downloadUrl,
+                        GeneratedDate: new Date().toISOString().replace('T', ' ').substring(0, 19)
+                    });
+                    console.log("Saved report metadata to Data Store");
+                }
             } catch (dbErr) {
                 console.error("Failed to save report to DB:", dbErr.message);
                 // We don't fail the request if just DB insert fails, return the URL anyway

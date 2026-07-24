@@ -22,8 +22,8 @@ import type {
 import { districtIdToName } from "../utils/districts";
 
 /** Base URL for Catalyst serverless deployment */
-const CATALYST_BASE = import.meta.env.PROD 
-  ? "https://dhaal-60077679458.development.catalystserverless.in/server"
+export const CATALYST_BASE = process.env.NODE_ENV === "production" 
+  ? "/server"
   : "/catalyst/server";
 
 // ── Clusters ──

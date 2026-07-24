@@ -1,24 +1,8 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-@theme {
-  --color-navy-900: #0B1120;
-  --color-navy-800: #111827;
-  --color-critical: #EF4444;
-  --color-warning: #F59E0B;
-  --color-clear: #10B981;
-  --color-khaki: #D4AF37;
-  --color-police-blue: #3B82F6;
 
-  --font-sans: "Inter", "Geist", sans-serif;
-
-  --animate-pulse-ring: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
-}
-
-@keyframes pulse-ring {
-  0% { transform: scale(0.5); opacity: 0; }
-  50% { opacity: 0.5; }
-  100% { transform: scale(2.5); opacity: 0; }
-}
 
 @layer base {
   body {

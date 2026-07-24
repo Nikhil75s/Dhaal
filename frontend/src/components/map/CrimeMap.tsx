@@ -1,9 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { useDashboard } from "../../context/DashboardContext";
+import { CATALYST_BASE } from "../../data/api";
 import { KARNATAKA_DISTRICTS } from "../../utils/districts";
 import { TimeLapseScrubber } from "./TimeLapseScrubber";
 import { Loader2 } from "lucide-react";
-import { computeHexBins, hexBinsToGeoJSON, getResolutionForZoom } from "../../utils/hexbins";
+import {
+  computeHexBins,
+  hexBinsToGeoJSON,
+  getResolutionForZoom,
+} from "../../utils/hexbins";
 import { HexTooltip } from "./HexTooltip";
 import { getISTDateString, parseISTDate } from "../../utils/dateUtils";
 
@@ -14,14 +19,19 @@ declare global {
 }
 
 const MAPPLS_TOKEN =
-  import.meta.env.VITE_MAPPLS_TOKEN || "YOUR_MAPPLS_TOKEN_HERE";
-const API_URL =
-  "https://dhaal-60077679458.development.catalystserverless.in/server/spatial_api/api/v1/map/clusters";
-const ANOMALY_API_URL = 
-  "https://dhaal-60077679458.development.catalystserverless.in/server/anomaly_alerts_api/api/v1/ai/anomalies/history";
+  process.env.REACT_APP_MAPPLS_TOKEN || "YOUR_MAPPLS_TOKEN_HERE";
+const API_URL = `${CATALYST_BASE}/spatial_api/api/v1/map/clusters`;
+const ANOMALY_API_URL = `${CATALYST_BASE}/anomaly_alerts_api/api/v1/ai/anomalies/history`;
 
 export const CrimeMap = () => {
-  const { filters, setAvailableStations, setAvailableCrimeTypes, showAnomalies, targetLocation, setTargetLocation } = useDashboard();
+  const {
+    filters,
+    setAvailableStations,
+    setAvailableCrimeTypes,
+    showAnomalies,
+    targetLocation,
+    setTargetLocation,
+  } = useDashboard();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
 
@@ -69,7 +79,10 @@ export const CrimeMap = () => {
 
         // Add ResizeObserver to force canvas resize when container changes (fixes fullscreen exit bug)
         const resizeObserver = new ResizeObserver(() => {
-          if (mapInstanceRef.current && typeof mapInstanceRef.current.resize === "function") {
+          if (
+            mapInstanceRef.current &&
+            typeof mapInstanceRef.current.resize === "function"
+          ) {
             mapInstanceRef.current.resize();
           }
         });
@@ -154,7 +167,7 @@ export const CrimeMap = () => {
 
           setMapLoaded(true);
 
-          mapInstanceRef.current.on('zoomend', () => {
+          mapInstanceRef.current.on("zoomend", () => {
             if (mapInstanceRef.current) {
               const zoom = mapInstanceRef.current.getZoom();
               setCurrentResolution(getResolutionForZoom(zoom));
@@ -222,7 +235,7 @@ export const CrimeMap = () => {
 
     mapInstanceRef.current.setCenter({
       lat: targetLocation.lat,
-      lng: targetLocation.lng
+      lng: targetLocation.lng,
     });
     mapInstanceRef.current.setZoom(targetLocation.zoom || 14);
 
@@ -232,7 +245,7 @@ export const CrimeMap = () => {
       position: { lat: targetLocation.lat, lng: targetLocation.lng },
       html: `<div class="w-4 h-4 bg-red-500 rounded-full animate-ping"></div>`,
       width: 16,
-      height: 16
+      height: 16,
     });
 
     // Remove the marker and clear the target after a few seconds so it doesn't get stuck
@@ -240,7 +253,6 @@ export const CrimeMap = () => {
       if (marker && marker.remove) marker.remove();
       setTargetLocation(null);
     }, 5000);
-
   }, [targetLocation, mapLoaded]);
 
   // 3. Fetch Data (Runs only when District changes or on Mount)
@@ -254,14 +266,17 @@ export const CrimeMap = () => {
         const response = await fetch(url);
         if (!response.ok) throw new Error("Network response was not ok");
         const data = await response.json();
-        
+
         // Extract distinct police stations and crime types for the filters
         const stationsMap = new Map<string, string>();
         const crimeTypesSet = new Set<string>();
 
         data.forEach((item: any) => {
           if (item.PoliceStation?.PoliceStationID) {
-            stationsMap.set(item.PoliceStation.PoliceStationID.toString(), item.PoliceStation.StationName);
+            stationsMap.set(
+              item.PoliceStation.PoliceStationID.toString(),
+              item.PoliceStation.StationName,
+            );
           }
           if (item.CrimeHead?.CrimeGroupName) {
             crimeTypesSet.add(item.CrimeHead.CrimeGroupName);
@@ -271,7 +286,7 @@ export const CrimeMap = () => {
         setAvailableStations(
           Array.from(stationsMap.entries())
             .map(([id, name]) => ({ id, name }))
-            .sort((a, b) => a.name.localeCompare(b.name))
+            .sort((a, b) => a.name.localeCompare(b.name)),
         );
         setAvailableCrimeTypes(Array.from(crimeTypesSet).sort());
 
@@ -345,7 +360,8 @@ export const CrimeMap = () => {
         // 2. Police Station Filter
         if (
           filters.policeStationId &&
-          String(item.PoliceStation?.PoliceStationID) !== String(filters.policeStationId)
+          String(item.PoliceStation?.PoliceStationID) !==
+            String(filters.policeStationId)
         ) {
           return false;
         }
@@ -363,23 +379,37 @@ export const CrimeMap = () => {
             return false;
           }
 
-          if (filters.timeOfDay !== 'all') {
+          if (filters.timeOfDay !== "all") {
             const hour = itemDate.getHours();
-            if (filters.timeOfDay === 'morning' && (hour < 6 || hour >= 14)) return false;
-            if (filters.timeOfDay === 'afternoon' && (hour < 14 || hour >= 22)) return false;
-            if (filters.timeOfDay === 'night' && (hour >= 6 && hour < 22)) return false;
+            if (filters.timeOfDay === "morning" && (hour < 6 || hour >= 14))
+              return false;
+            if (filters.timeOfDay === "afternoon" && (hour < 14 || hour >= 22))
+              return false;
+            if (filters.timeOfDay === "night" && hour >= 6 && hour < 22)
+              return false;
           }
 
           if (filters.dayOfWeek) {
             // JS getDay(): 0 = Sunday, 1 = Monday...
-            const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const dayNames = [
+              "Sunday",
+              "Monday",
+              "Tuesday",
+              "Wednesday",
+              "Thursday",
+              "Friday",
+              "Saturday",
+            ];
             const dayName = dayNames[itemDate.getDay()];
             if (dayName !== filters.dayOfWeek) return false;
           }
         }
-        
+
         // 4. Crime Category Filter
-        if (filters.crimeGroup && item.CrimeHead?.CrimeGroupName !== filters.crimeGroup) {
+        if (
+          filters.crimeGroup &&
+          item.CrimeHead?.CrimeGroupName !== filters.crimeGroup
+        ) {
           return false;
         }
 
@@ -406,13 +436,16 @@ export const CrimeMap = () => {
           paint: {
             "fill-color": [
               "case",
-              ["==", ["get", "confidence"], "99%"], "rgba(153, 27, 27, 0.7)",   // Red 800
-              ["==", ["get", "confidence"], "95%"], "rgba(220, 38, 38, 0.55)",  // Red 600
-              ["==", ["get", "confidence"], "90%"], "rgba(248, 113, 113, 0.4)", // Red 400
-              "rgba(251, 146, 60, 0.15)" // None/Insignificant (pale orange/grey)
+              ["==", ["get", "confidence"], "99%"],
+              "rgba(153, 27, 27, 0.7)", // Red 800
+              ["==", ["get", "confidence"], "95%"],
+              "rgba(220, 38, 38, 0.55)", // Red 600
+              ["==", ["get", "confidence"], "90%"],
+              "rgba(248, 113, 113, 0.4)", // Red 400
+              "rgba(251, 146, 60, 0.15)", // None/Insignificant (pale orange/grey)
             ],
-            "fill-outline-color": "rgba(255, 255, 255, 0.15)"
-          }
+            "fill-outline-color": "rgba(255, 255, 255, 0.15)",
+          },
         });
 
         // Add an additional outline layer for better definition
@@ -423,19 +456,26 @@ export const CrimeMap = () => {
           paint: {
             "line-color": [
               "case",
-              ["==", ["get", "confidence"], "99%"], "rgba(252, 165, 165, 0.6)",
-              ["==", ["get", "confidence"], "95%"], "rgba(252, 165, 165, 0.4)",
-              ["==", ["get", "confidence"], "90%"], "rgba(252, 165, 165, 0.2)",
-              "rgba(255, 255, 255, 0.15)"
+              ["==", ["get", "confidence"], "99%"],
+              "rgba(252, 165, 165, 0.6)",
+              ["==", ["get", "confidence"], "95%"],
+              "rgba(252, 165, 165, 0.4)",
+              ["==", ["get", "confidence"], "90%"],
+              "rgba(252, 165, 165, 0.2)",
+              "rgba(255, 255, 255, 0.15)",
             ],
-            "line-width": 1
-          }
+            "line-width": 1,
+          },
         });
 
         map.on("mousemove", "crime-hex", (e: any) => {
           // If the mouse is actually over our HTML marker, ignore the hex layer
           const target = e.originalEvent.target as HTMLElement;
-          if (target && typeof target.closest === "function" && target.closest('.group\\/marker')) {
+          if (
+            target &&
+            typeof target.closest === "function" &&
+            target.closest(".group\\/marker")
+          ) {
             map.getCanvas().style.cursor = "";
             setHoveredHex(null);
             return;
@@ -450,7 +490,7 @@ export const CrimeMap = () => {
               count: feature.properties.count,
               crimeTypes: JSON.parse(feature.properties.crimeTypes),
               confidence: feature.properties.confidence,
-              zScore: feature.properties.giZScore
+              zScore: feature.properties.giZScore,
             });
           }
         });
@@ -459,7 +499,6 @@ export const CrimeMap = () => {
           map.getCanvas().style.cursor = "";
           setHoveredHex(null);
         });
-
       } else {
         // Source already exists, just update the data smoothly
         map.getSource("crimes").setData(geoJsonData);
@@ -500,7 +539,11 @@ export const CrimeMap = () => {
     if (!showAnomalies || !isToday) return;
 
     anomalies.forEach((anomaly) => {
-      if (anomaly.pulsingZone && anomaly.pulsingZone.lat && anomaly.pulsingZone.lng) {
+      if (
+        anomaly.pulsingZone &&
+        anomaly.pulsingZone.lat &&
+        anomaly.pulsingZone.lng
+      ) {
         // Build the HTML for the pulsing marker and tooltip using Tailwind classes
         const html = `
           <div class="group/marker relative cursor-pointer" style="z-index: 50;">
@@ -512,7 +555,7 @@ export const CrimeMap = () => {
                 <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
                 Emerging Trend
               </div>
-              ${anomaly.Message.replace(/\s*\(Z-Score:\s*[\d.]+\)/i, '')}
+              ${anomaly.Message.replace(/\s*\(Z-Score:\s*[\d.]+\)/i, "")}
             </div>
           </div>
         `;
@@ -520,7 +563,10 @@ export const CrimeMap = () => {
         try {
           const marker = new window.mappls.Marker({
             map: mapInstanceRef.current,
-            position: { lat: anomaly.pulsingZone.lat, lng: anomaly.pulsingZone.lng },
+            position: {
+              lat: anomaly.pulsingZone.lat,
+              lng: anomaly.pulsingZone.lng,
+            },
             html: html,
             width: 16,
             height: 16,
@@ -538,7 +584,13 @@ export const CrimeMap = () => {
       });
       anomalyMarkersRef.current = [];
     };
-  }, [mapLoaded, anomalies, showAnomalies, filters.endDate, filters.replayDate]);
+  }, [
+    mapLoaded,
+    anomalies,
+    showAnomalies,
+    filters.endDate,
+    filters.replayDate,
+  ]);
 
   return (
     <div className="w-full h-full relative group bg-[#10141f] overflow-hidden">
@@ -551,8 +603,12 @@ export const CrimeMap = () => {
       {isFetchingMapData && (
         <div className="absolute inset-0 bg-[#0A0F1A]/60 backdrop-blur-sm z-40 flex flex-col items-center justify-center transition-all duration-300">
           <Loader2 className="animate-spin text-khaki mb-4" size={48} />
-          <div className="text-gray-200 font-semibold text-lg tracking-wide">Analyzing Spatial Data...</div>
-          <div className="text-gray-400 text-sm mt-2">Fetching anomaly clusters from Catalyst</div>
+          <div className="text-gray-200 font-semibold text-lg tracking-wide">
+            Analyzing Spatial Data...
+          </div>
+          <div className="text-gray-400 text-sm mt-2">
+            Fetching clusters from Catalyst
+          </div>
         </div>
       )}
 

@@ -8,6 +8,8 @@ export interface DashboardFilters {
   endDate: string;
   districtId: string | null;
   policeStationId: string | null;
+  networkDistrictId: string | null;
+  networkPoliceStationId: string | null;
   crimeGroup: string | null;
   dayOfWeek: string | null;
   replayDate: string | null;
@@ -36,6 +38,8 @@ const defaultFilters: DashboardFilters = {
   endDate: getISTDateString(new Date()), // today
   districtId: null,
   policeStationId: null,
+  networkDistrictId: null,
+  networkPoliceStationId: null,
   crimeGroup: null,
   dayOfWeek: null,
   replayDate: null,

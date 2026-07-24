@@ -9,7 +9,7 @@ interface DistrictDropdownProps {
 }
 
 export const DistrictDropdown = ({ value, onChange }: DistrictDropdownProps) => {
-  const { filters, setFilters } = useDashboard();
+  const { filters, setFilters, activeView } = useDashboard();
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -29,14 +29,19 @@ export const DistrictDropdown = ({ value, onChange }: DistrictDropdownProps) => 
     district.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const effectiveValue = value !== undefined ? value : filters.districtId;
+  const contextDistrictId = activeView === 'network' ? filters.networkDistrictId : filters.districtId;
+  const effectiveValue = value !== undefined ? value : contextDistrictId;
   const selectedName = effectiveValue ? KARNATAKA_DISTRICTS[effectiveValue]?.name : 'All Districts';
 
   const handleSelect = (id: string | null) => {
     if (onChange) {
       onChange(id);
     } else {
-      setFilters(prev => ({ ...prev, districtId: id, policeStationId: null }));
+      if (activeView === 'network') {
+        setFilters(prev => ({ ...prev, networkDistrictId: id, networkPoliceStationId: null }));
+      } else {
+        setFilters(prev => ({ ...prev, districtId: id, policeStationId: null }));
+      }
     }
     setIsOpen(false);
     setSearch('');

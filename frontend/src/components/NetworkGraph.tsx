@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
-import { Network, TrendingUp, AlertTriangle, Loader, Route, X } from 'lucide-react';
+import { Network, TrendingUp, AlertTriangle, Loader, Route, X, Maximize, Minimize } from 'lucide-react';
 import { useDashboard } from '../context/DashboardContext';
 import { fetchNetworkPath, fetchNetworkExpand, fetchRepeatOffenders } from '../data/api';
 import type { NetworkGraphData, NetworkNode } from '../data/schemas';
@@ -49,11 +49,40 @@ function getLinkTargetId(link: GraphLink): string {
 }
 
 export default function NetworkGraph() {
-  const { filters } = useDashboard();
+  const { filters, setFilters } = useDashboard();
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.getElementById('app-content-area')?.requestFullscreen().catch(err => {
+        console.error("Error attempting to enable fullscreen:", err);
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  };
   
   // Use localized state for the Network Graph so that filtering here doesn't "seep" into the Map view globally
-  const [localDistrict, setLocalDistrict] = useState<string | null>(filters.districtId);
-  const [localStation, setLocalStation] = useState<string | null>(filters.policeStationId);
+  const localDistrict = filters.networkDistrictId;
+  const localStation = filters.networkPoliceStationId;
+
+  const setLocalDistrict = (id: string | null) => {
+    setFilters(prev => ({ ...prev, networkDistrictId: id, networkPoliceStationId: null }));
+  };
+
+  const setLocalStation = (id: string | null) => {
+    setFilters(prev => ({ ...prev, networkPoliceStationId: id }));
+  };
 
   // ── Data & History state ──
   const [graphState, setGraphState] = useState<{
@@ -587,6 +616,14 @@ export default function NetworkGraph() {
             />
           </div>
         )}
+        
+        <button 
+          onClick={toggleFullscreen}
+          className="bg-[#1E293B] text-gray-300 p-2.5 rounded-full hover:bg-slate-700 transition-colors shadow-md shadow-black/30 border border-white/5 ml-3"
+          title={isFullscreen ? "Exit Fullscreen" : "Fullscreen Graph"}
+        >
+          {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+        </button>
       </div>
 
       {/* Tab content */}
