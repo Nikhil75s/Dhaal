@@ -3,7 +3,12 @@ import { KARNATAKA_DISTRICTS } from '../../utils/districts';
 import { Search, MapPin, ChevronDown } from 'lucide-react';
 import { useDashboard } from '../../context/DashboardContext';
 
-export const DistrictDropdown = () => {
+interface DistrictDropdownProps {
+  value?: string | null;
+  onChange?: (id: string | null) => void;
+}
+
+export const DistrictDropdown = ({ value, onChange }: DistrictDropdownProps) => {
   const { filters, setFilters } = useDashboard();
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -24,10 +29,15 @@ export const DistrictDropdown = () => {
     district.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const selectedName = filters.districtId ? KARNATAKA_DISTRICTS[filters.districtId]?.name : 'All Districts';
+  const effectiveValue = value !== undefined ? value : filters.districtId;
+  const selectedName = effectiveValue ? KARNATAKA_DISTRICTS[effectiveValue]?.name : 'All Districts';
 
   const handleSelect = (id: string | null) => {
-    setFilters(prev => ({ ...prev, districtId: id, policeStationId: null }));
+    if (onChange) {
+      onChange(id);
+    } else {
+      setFilters(prev => ({ ...prev, districtId: id, policeStationId: null }));
+    }
     setIsOpen(false);
     setSearch('');
   };
@@ -61,7 +71,7 @@ export const DistrictDropdown = () => {
           <div className="max-h-64 overflow-y-auto custom-scrollbar">
             <div 
               onClick={() => handleSelect(null)}
-              className={`px-5 py-2.5 text-sm cursor-pointer hover:bg-[#0F172A] transition-colors ${!filters.districtId ? 'text-khaki bg-[#0F172A] font-medium' : 'text-gray-300'}`}
+              className={`px-5 py-2.5 text-sm cursor-pointer hover:bg-[#0F172A] transition-colors ${!effectiveValue ? 'text-khaki bg-[#0F172A] font-medium' : 'text-gray-300'}`}
             >
               All Districts
             </div>
@@ -69,7 +79,7 @@ export const DistrictDropdown = () => {
               <div
                 key={id}
                 onClick={() => handleSelect(id)}
-                className={`px-5 py-2.5 text-sm cursor-pointer hover:bg-[#0F172A] transition-colors ${filters.districtId === id ? 'text-khaki bg-[#0F172A] font-medium' : 'text-gray-300'}`}
+                className={`px-5 py-2.5 text-sm cursor-pointer hover:bg-[#0F172A] transition-colors ${effectiveValue === id ? 'text-khaki bg-[#0F172A] font-medium' : 'text-gray-300'}`}
               >
                 {district.name}
               </div>

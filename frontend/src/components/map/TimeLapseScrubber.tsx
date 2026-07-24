@@ -34,7 +34,7 @@ export const TimeLapseScrubber = () => {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isPlaying, speed, setFilters]);
+  }, [isPlaying, setFilters]);
 
   // Calculate progress percentage
   const startDateMs = new Date(filters.startDate).getTime();

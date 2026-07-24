@@ -38,7 +38,7 @@ export default function AlertMarquee() {
     return (
       <div className="w-full h-10 bg-critical/5 border border-critical/20 rounded-lg flex items-center justify-center gap-2">
         <Loader size={12} className="animate-spin text-critical" />
-        <span className="text-xs text-text-secondary">Loading alerts...</span>
+        <span className="text-xs text-gray-400">Loading alerts...</span>
       </div>
     );
   }
@@ -76,13 +76,13 @@ export default function AlertMarquee() {
                     : 'bg-clear'
                 }`}
               />
-              <span className="text-xs text-text-primary font-medium">
+              <span className="text-xs text-gray-100 font-medium">
                 {anomaly.district}:
               </span>
-              <span className="text-xs text-text-secondary">
+              <span className="text-xs text-gray-400">
                 {anomaly.description}
               </span>
-              <span className="text-xs text-text-secondary opacity-40 mx-2">│</span>
+              <span className="text-xs text-gray-400 opacity-40 mx-2">│</span>
             </span>
           ))}
         </div>
@@ -90,3 +90,4 @@ export default function AlertMarquee() {
     </div>
   );
 }
+

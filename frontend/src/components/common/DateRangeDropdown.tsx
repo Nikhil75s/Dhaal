@@ -3,8 +3,14 @@ import { Calendar, ChevronDown } from 'lucide-react';
 import { useDashboard } from '../../context/DashboardContext';
 import { CustomDatePicker } from './CustomDatePicker';
 
+interface DateRangeDropdownProps {
+  startDate?: string;
+  endDate?: string;
+  onChangeStart?: (val: string) => void;
+  onChangeEnd?: (val: string) => void;
+}
 
-export const DateRangeDropdown = () => {
+export const DateRangeDropdown = ({ startDate, endDate, onChangeStart, onChangeEnd }: DateRangeDropdownProps) => {
   const { filters, setFilters } = useDashboard();
   const [isOpen, setIsOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -20,6 +26,9 @@ export const DateRangeDropdown = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const effectiveStart = startDate !== undefined ? startDate : filters.startDate;
+  const effectiveEnd = endDate !== undefined ? endDate : filters.endDate;
+
   return (
     <div className="relative" ref={wrapperRef}>
       <div 
@@ -29,7 +38,7 @@ export const DateRangeDropdown = () => {
         <div className="flex items-center overflow-hidden">
           <Calendar size={16} className="text-khaki mr-3 shrink-0" />
           <span className="text-gray-200 whitespace-nowrap pr-2">
-            {filters.startDate} <span className="text-gray-500 mx-1">to</span> {filters.endDate}
+            {effectiveStart} <span className="text-gray-500 mx-1">to</span> {effectiveEnd}
           </span>
         </div>
         <ChevronDown size={14} className={`text-gray-400 shrink-0 ml-2 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
@@ -40,13 +49,19 @@ export const DateRangeDropdown = () => {
           <div className="flex flex-col space-y-4">
             <CustomDatePicker 
               label="Start Date"
-              value={filters.startDate}
-              onChange={(val) => setFilters(prev => ({ ...prev, startDate: val }))}
+              value={effectiveStart}
+              onChange={(val) => {
+                if (onChangeStart) onChangeStart(val);
+                else setFilters(prev => ({ ...prev, startDate: val }));
+              }}
             />
             <CustomDatePicker 
               label="End Date"
-              value={filters.endDate}
-              onChange={(val) => setFilters(prev => ({ ...prev, endDate: val }))}
+              value={effectiveEnd}
+              onChange={(val) => {
+                if (onChangeEnd) onChangeEnd(val);
+                else setFilters(prev => ({ ...prev, endDate: val }));
+              }}
             />
           </div>
         </div>

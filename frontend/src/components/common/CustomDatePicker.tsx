@@ -138,14 +138,20 @@ export const CustomDatePicker = ({ value, onChange, label }: CustomDatePickerPro
             {days.map((d, i) => {
               const isSelected = selectedDate && isSameDay(d, selectedDate);
               const isCurrentMonth = isSameMonth(d, currentMonth);
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const isFuture = d > today;
+              
               return (
                 <button
                   key={i}
-                  onClick={() => handleDateClick(d)}
+                  disabled={isFuture}
+                  onClick={() => !isFuture && handleDateClick(d)}
                   className={`
                     w-8 h-8 rounded-md text-xs flex items-center justify-center transition-colors
-                    ${isSelected ? 'bg-khaki text-[#0B1120] font-bold' : 'hover:bg-white/10 text-gray-300'}
-                    ${!isCurrentMonth && !isSelected ? 'text-gray-600' : ''}
+                    ${isFuture ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}
+                    ${isSelected && !isFuture ? 'bg-khaki text-[#0B1120] font-bold' : (!isFuture ? 'hover:bg-white/10 text-gray-300' : 'text-gray-300')}
+                    ${!isCurrentMonth && !isSelected && !isFuture ? 'text-gray-600' : ''}
                   `}
                 >
                   {format(d, 'd')}

@@ -184,8 +184,9 @@ export default function RiskGauge({ score, label, size = 220 }: RiskGaugeProps) 
 
       {/* Label */}
       {label && (
-        <p className="text-xs text-text-secondary mt-1 text-center">{label}</p>
+        <p className="text-xs text-gray-400 mt-1 text-center">{label}</p>
       )}
     </div>
   );
 }
+

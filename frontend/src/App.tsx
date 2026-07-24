@@ -2,7 +2,6 @@ import { DashboardProvider, useDashboard } from './context/DashboardContext';
 import { MainLayout } from './components/layout/MainLayout';
 import { CrimeMap } from './components/map/CrimeMap';
 import NetworkGraph from './components/NetworkGraph';
-import SocioEconomicPanel from './components/SocioEconomicPanel';
 import ReportHistoryPanel from './components/ReportHistoryPanel';
 
 const AppContent = () => {
@@ -10,9 +9,10 @@ const AppContent = () => {
   
   return (
     <MainLayout>
-      {activeView === 'map' && <CrimeMap />}
+      <div className={activeView === 'map' ? 'block w-full h-full' : 'hidden'}>
+        <CrimeMap />
+      </div>
       {activeView === 'network' && <NetworkGraph />}
-      {activeView === 'data' && <SocioEconomicPanel />}
       {activeView === 'reports' && <ReportHistoryPanel />}
       {activeView === 'settings' && (
         <div className="w-full h-full flex items-center justify-center">

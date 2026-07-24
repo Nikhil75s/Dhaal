@@ -53,14 +53,14 @@ export default function NetworkSearchBar({ onSelect }: { onSelect: (node: Networ
   }, {} as Record<string, NetworkNode[]>);
 
   return (
-    <div className="relative z-50 w-full max-w-md" ref={containerRef}>
+    <div className="relative z-50 w-full shadow-lg shadow-black/20" ref={containerRef}>
       <div className="relative">
         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <Search size={16} className="text-text-secondary" />
+          <Search size={16} className="text-khaki opacity-70" />
         </div>
         <input
           type="text"
-          className="w-full bg-slate-800/50 border border-slate-700 rounded-lg pl-9 pr-8 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent-blue transition-colors"
+          className="w-full bg-[#1E293B]/95 backdrop-blur border border-white/10 rounded-lg pl-9 pr-8 py-2 text-sm text-gray-100 placeholder:text-gray-400 focus:outline-none focus:border-khaki focus:ring-1 focus:ring-khaki transition-all"
           placeholder="Search suspects, victims, cases..."
           value={query}
           onChange={(e) => {
@@ -78,7 +78,7 @@ export default function NetworkSearchBar({ onSelect }: { onSelect: (node: Networ
               setResults([]);
               setIsOpen(false);
             }}
-            className="absolute inset-y-0 right-0 pr-3 flex items-center text-text-secondary hover:text-text-primary cursor-pointer"
+            className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-khaki cursor-pointer transition-colors"
           >
             <X size={14} />
           </button>
@@ -86,9 +86,9 @@ export default function NetworkSearchBar({ onSelect }: { onSelect: (node: Networ
       </div>
 
       {isOpen && query.trim() && (
-        <div className="absolute top-full mt-2 w-full bg-[#0F172A] border border-slate-700 rounded-lg shadow-xl overflow-hidden max-h-80 overflow-y-auto">
+        <div className="absolute top-full mt-3 w-full bg-[#1E293B] border border-white/10 rounded-xl shadow-2xl shadow-black/40 overflow-hidden max-h-96 overflow-y-auto custom-scrollbar">
           {loading ? (
-            <div className="p-4 flex items-center justify-center text-text-secondary">
+            <div className="p-4 flex items-center justify-center text-gray-400">
               <Loader size={16} className="animate-spin mr-2" />
               <span className="text-sm">Searching...</span>
             </div>
@@ -96,14 +96,14 @@ export default function NetworkSearchBar({ onSelect }: { onSelect: (node: Networ
             <div className="py-2">
               {Object.entries(groupedResults).map(([group, nodes]) => (
                 <div key={group} className="mb-2 last:mb-0">
-                  <div className="px-3 py-1 text-xs font-semibold text-text-secondary uppercase tracking-wider bg-slate-800/30">
+                  <div className="px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-[#0F172A]">
                     {GROUP_LABELS[group] || group}
                   </div>
                   <ul>
                     {nodes.map((node) => (
                       <li key={node.id}>
                         <button
-                          className="w-full text-left px-4 py-2 text-sm hover:bg-slate-800 transition-colors flex items-center gap-2 cursor-pointer"
+                          className="w-full text-left px-5 py-3 text-sm hover:bg-[#0F172A] transition-colors flex items-center gap-3 cursor-pointer border-b border-white/5 last:border-0"
                           onClick={() => {
                             onSelect(node);
                             setIsOpen(false);
@@ -114,7 +114,7 @@ export default function NetworkSearchBar({ onSelect }: { onSelect: (node: Networ
                             className="w-2 h-2 rounded-full flex-shrink-0"
                             style={{ backgroundColor: nodeColor(node.group) }}
                           />
-                          <span className="truncate text-text-primary">{node.label}</span>
+                          <span className="truncate text-gray-100">{node.label}</span>
                         </button>
                       </li>
                     ))}
@@ -123,7 +123,7 @@ export default function NetworkSearchBar({ onSelect }: { onSelect: (node: Networ
               ))}
             </div>
           ) : (
-            <div className="p-4 text-center text-sm text-text-secondary">
+            <div className="p-4 text-center text-sm text-gray-400">
               No results found for "{query}"
             </div>
           )}
@@ -132,3 +132,4 @@ export default function NetworkSearchBar({ onSelect }: { onSelect: (node: Networ
     </div>
   );
 }
+

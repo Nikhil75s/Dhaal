@@ -60,6 +60,10 @@ export const NetworkNodeSchema = z.object({
                       // unrecognized groups should render (blue fallback) not fail validation
   mo: z.string().optional(),
   jurisdiction: z.string().optional(),
+  date: z.string().optional(),
+  briefFacts: z.string().optional(),
+  age: z.coerce.number().optional(),
+  gender: z.string().optional(),
 });
 
 export const NetworkLinkSchema = z.object({
@@ -104,11 +108,20 @@ export const EnrichedPredictionSchema = z.object({
   }),
   emergingAnomalies: z.array(z.object({
     crimeHeadId: z.number().or(z.string()),
+    crimeHeadName: z.string().optional(),
     historicalMonthlyAverage: z.number(),
     predictedIncidentCount: z.number(),
     percentageIncrease: z.number(),
     alertMessage: z.string(),
   })),
+  spatiotemporalHotspots: z.array(z.object({
+    location: z.string(),
+    timeWindow: z.string(),
+    riskFactor: z.string(),
+    linkedCrimeHead: z.string().optional(),
+    lat: z.number().optional(),
+    lng: z.number().optional()
+  })).optional(),
   hiddenCorrelations: z.object({
     socioEconomicDrivers: z.object({
       urbanizationIndex: z.number(),
@@ -149,7 +162,8 @@ export const LiveAnomalyAlertSchema = z.object({
 });
 export const LiveAnomalyResponseSchema = z.object({
   status: z.string(),
-  analyzedDistricts: z.number(),
+  analyzedDistricts: z.number().optional(),
+  analyzedCategories: z.number().optional(),
   anomaliesDetected: z.number(),
   alerts: z.array(LiveAnomalyAlertSchema),
 });

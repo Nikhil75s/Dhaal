@@ -18,7 +18,7 @@ export default function NetworkTypeFilters({
   };
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 w-full">
       {(Object.keys(filters) as Array<keyof NetworkFilters>).map((type) => {
         const isActive = filters[type];
         return (
@@ -26,15 +26,14 @@ export default function NetworkTypeFilters({
             key={type}
             onClick={() => toggleFilter(type)}
             className={`
-              flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-colors cursor-pointer
-              border
+              flex-1 flex items-center justify-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer border
               ${isActive 
-                ? 'bg-slate-800 border-slate-700 text-text-primary' 
-                : 'bg-transparent border-slate-800 text-text-secondary opacity-50 hover:opacity-100'}
+                ? 'bg-[#1E293B] border-white/10 text-gray-100 shadow-md shadow-black/20' 
+                : 'bg-[#0B1120]/60 border-transparent text-gray-500 hover:bg-[#1E293B]/60 hover:text-gray-300'}
             `}
           >
             <div
-              className="w-2 h-2 rounded-full"
+              className="w-2 h-2 rounded-full shadow-sm"
               style={{ backgroundColor: nodeColor(type) }}
             />
             {GROUP_LABELS[type] || type}
@@ -44,3 +43,4 @@ export default function NetworkTypeFilters({
     </div>
   );
 }
+
