@@ -1,0 +1,13 @@
+{
+  "name": "ai_predictions_api",
+  "version": "1.0.0",
+  "main": "index.js",
+  "description": "AI Predictions API",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^16.4.5",
+    "express": "^5.2.1",
+    "zcatalyst-sdk-node": "^3.0.0",
+    "axios": "^1.18.1"
+  }
+}

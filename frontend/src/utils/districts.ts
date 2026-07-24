@@ -31,3 +31,24 @@ export const KARNATAKA_DISTRICTS: Record<string, { name: string; lat: number; ln
   "130": { name: "Yadgir", lat: 16.7661, lng: 77.1404 },
   "131": { name: "Vijayanagara", lat: 15.2673, lng: 76.3888 }
 };
+
+/** Convert numeric district ID → human-readable name. Returns "Unknown" for unrecognized IDs. */
+export function districtIdToName(id: string | number): string {
+  const entry = KARNATAKA_DISTRICTS[String(id)];
+  return entry ? entry.name : `District ${id}`;
+}
+
+/** Convert human-readable name → numeric district ID. Returns null if not found. */
+export function districtNameToId(name: string): string | null {
+  const normalized = name.trim().toLowerCase();
+  for (const [id, entry] of Object.entries(KARNATAKA_DISTRICTS)) {
+    if (entry.name.toLowerCase() === normalized) return id;
+  }
+  return null;
+}
+
+/** Get lat/lng for a district ID. */
+export function districtCoords(id: string | number): { lat: number; lng: number } | null {
+  const entry = KARNATAKA_DISTRICTS[String(id)];
+  return entry ? { lat: entry.lat, lng: entry.lng } : null;
+}

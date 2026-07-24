@@ -5,6 +5,7 @@ import { TimeLapseScrubber } from "./TimeLapseScrubber";
 import { Loader2 } from "lucide-react";
 import { computeHexBins, hexBinsToGeoJSON, getResolutionForZoom } from "../../utils/hexbins";
 import { HexTooltip } from "./HexTooltip";
+import { getISTDateString, parseISTDate } from "../../utils/dateUtils";
 
 declare global {
   interface Window {
@@ -16,9 +17,11 @@ const MAPPLS_TOKEN =
   import.meta.env.VITE_MAPPLS_TOKEN || "YOUR_MAPPLS_TOKEN_HERE";
 const API_URL =
   "https://dhaal-60077679458.development.catalystserverless.in/server/spatial_api/api/v1/map/clusters";
+const ANOMALY_API_URL = 
+  "https://dhaal-60077679458.development.catalystserverless.in/server/anomaly_alerts_api/api/v1/ai/anomalies/history";
 
 export const CrimeMap = () => {
-  const { filters, setAvailableStations, setAvailableCrimeTypes } = useDashboard();
+  const { filters, setAvailableStations, setAvailableCrimeTypes, showAnomalies, targetLocation, setTargetLocation } = useDashboard();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
 
@@ -28,6 +31,24 @@ export const CrimeMap = () => {
   const [isFetchingMapData, setIsFetchingMapData] = useState(false);
   const [currentResolution, setCurrentResolution] = useState(5);
   const [hoveredHex, setHoveredHex] = useState<any>(null);
+  const [anomalies, setAnomalies] = useState<any[]>([]);
+  const anomalyMarkersRef = useRef<any[]>([]);
+
+  // 0. Fetch Anomalies (Today's default)
+  useEffect(() => {
+    const fetchAnomalies = async () => {
+      try {
+        const response = await fetch(ANOMALY_API_URL);
+        const data = await response.json();
+        if (data.status === "success" && data.alerts) {
+          setAnomalies(data.alerts);
+        }
+      } catch (err) {
+        console.error("Failed to fetch anomalies", err);
+      }
+    };
+    fetchAnomalies();
+  }, []);
 
   // 1. Initialize Map
   useEffect(() => {
@@ -195,6 +216,33 @@ export const CrimeMap = () => {
     }
   }, [filters.districtId, mapLoaded]);
 
+  // 2.5 Handle Target Location (from Predictive Dash "Show on Map")
+  useEffect(() => {
+    if (!mapLoaded || !mapInstanceRef.current || !targetLocation) return;
+
+    mapInstanceRef.current.setCenter({
+      lat: targetLocation.lat,
+      lng: targetLocation.lng
+    });
+    mapInstanceRef.current.setZoom(targetLocation.zoom || 14);
+
+    // Optional: Add a temporary marker or pulse effect
+    const marker = new window.mappls.Marker({
+      map: mapInstanceRef.current,
+      position: { lat: targetLocation.lat, lng: targetLocation.lng },
+      html: `<div class="w-4 h-4 bg-red-500 rounded-full animate-ping"></div>`,
+      width: 16,
+      height: 16
+    });
+
+    // Remove the marker and clear the target after a few seconds so it doesn't get stuck
+    setTimeout(() => {
+      if (marker && marker.remove) marker.remove();
+      setTargetLocation(null);
+    }, 5000);
+
+  }, [targetLocation, mapLoaded]);
+
   // 3. Fetch Data (Runs only when District changes or on Mount)
   useEffect(() => {
     if (!mapLoaded || !mapInstanceRef.current) return;
@@ -276,13 +324,13 @@ export const CrimeMap = () => {
     const plotData = () => {
       // Filter crimes by district and date range
       const startDateMs = filters.startDate
-        ? new Date(filters.startDate).getTime()
+        ? parseISTDate(filters.startDate + "T00:00:00").getTime()
         : 0;
 
       // If time-lapse is running, restrict the end date to the current animated replayDate
       const activeEndDate = filters.replayDate || filters.endDate;
       const endDateMs = activeEndDate
-        ? new Date(activeEndDate).setHours(23, 59, 59, 999)
+        ? parseISTDate(activeEndDate + "T23:59:59").getTime()
         : Infinity;
 
       const filteredData = rawData.filter((item: any) => {
@@ -306,7 +354,7 @@ export const CrimeMap = () => {
         const dateStr = item.CaseMaster?.CrimeRegisteredDate;
         if (dateStr) {
           // Supports "YYYY-MM-DD" or "YYYY-MM-DD HH:mm:ss"
-          const itemDate = new Date(dateStr.replace(" ", "T"));
+          const itemDate = parseISTDate(dateStr);
           const itemDateMs = itemDate.getTime();
           if (
             !isNaN(itemDateMs) &&
@@ -385,6 +433,14 @@ export const CrimeMap = () => {
         });
 
         map.on("mousemove", "crime-hex", (e: any) => {
+          // If the mouse is actually over our HTML marker, ignore the hex layer
+          const target = e.originalEvent.target as HTMLElement;
+          if (target && typeof target.closest === "function" && target.closest('.group\\/marker')) {
+            map.getCanvas().style.cursor = "";
+            setHoveredHex(null);
+            return;
+          }
+
           if (e.features.length > 0) {
             const feature = e.features[0];
             map.getCanvas().style.cursor = "pointer";
@@ -424,6 +480,65 @@ export const CrimeMap = () => {
     currentResolution,
     mapLoaded,
   ]);
+
+  // 5. Render Anomaly Pulsing Markers
+  useEffect(() => {
+    if (!mapLoaded || !mapInstanceRef.current || anomalies.length === 0) return;
+
+    // Clear existing markers
+    anomalyMarkersRef.current.forEach((marker) => {
+      if (typeof marker.remove === "function") marker.remove();
+    });
+    anomalyMarkersRef.current = [];
+
+    // Check if the current effective map date is exactly today
+    const activeEndDate = filters.replayDate || filters.endDate;
+    const todayStr = getISTDateString();
+    const isToday = activeEndDate === todayStr;
+
+    // Only render anomalies if toggle is ON and the date is Today
+    if (!showAnomalies || !isToday) return;
+
+    anomalies.forEach((anomaly) => {
+      if (anomaly.pulsingZone && anomaly.pulsingZone.lat && anomaly.pulsingZone.lng) {
+        // Build the HTML for the pulsing marker and tooltip using Tailwind classes
+        const html = `
+          <div class="group/marker relative cursor-pointer" style="z-index: 50;">
+            <div class="w-12 h-12 bg-red-500/40 rounded-full animate-ping absolute -top-4 -left-4"></div>
+            <div class="w-4 h-4 bg-red-600 rounded-full border-2 border-white relative z-10 shadow-[0_0_15px_rgba(220,38,38,0.8)]"></div>
+            
+            <div class="hidden group-hover/marker:block absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-64 p-3 bg-red-950/95 text-red-50 text-sm rounded-xl border border-red-800 shadow-2xl backdrop-blur-md z-[100] pointer-events-none text-center leading-relaxed">
+              <div class="font-bold text-red-400 mb-1.5 flex items-center justify-center gap-2 text-xs uppercase tracking-wider">
+                <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                Emerging Trend
+              </div>
+              ${anomaly.Message.replace(/\s*\(Z-Score:\s*[\d.]+\)/i, '')}
+            </div>
+          </div>
+        `;
+
+        try {
+          const marker = new window.mappls.Marker({
+            map: mapInstanceRef.current,
+            position: { lat: anomaly.pulsingZone.lat, lng: anomaly.pulsingZone.lng },
+            html: html,
+            width: 16,
+            height: 16,
+          });
+          anomalyMarkersRef.current.push(marker);
+        } catch (e) {
+          console.warn("Failed to create anomaly marker:", e);
+        }
+      }
+    });
+
+    return () => {
+      anomalyMarkersRef.current.forEach((marker) => {
+        if (typeof marker.remove === "function") marker.remove();
+      });
+      anomalyMarkersRef.current = [];
+    };
+  }, [mapLoaded, anomalies, showAnomalies, filters.endDate, filters.replayDate]);
 
   return (
     <div className="w-full h-full relative group bg-[#10141f] overflow-hidden">

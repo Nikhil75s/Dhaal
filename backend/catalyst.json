@@ -1,6 +1,8 @@
 {
   "functions": {
-    "targets": ["spatial_api", "network_api", "reports_api"],
+    "targets": [
+      "anomaly_alerts_api"
+    ],
     "ignore": [],
     "source": "functions"
   }

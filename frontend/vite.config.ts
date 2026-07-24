@@ -8,4 +8,13 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  server: {
+    proxy: {
+      '/catalyst': {
+        target: 'https://dhaal-60077679458.development.catalystserverless.in',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/catalyst/, ''),
+      },
+    },
+  },
 })
