@@ -132,6 +132,8 @@ export const EnrichedPredictionSchema = z.object({
   }),
   rawQuickMlExplainability: z.any().optional(),
 });
+export type EnrichedPrediction = z.infer<typeof EnrichedPredictionSchema>;
+
 export const EnrichedPredictionResponseSchema = z.object({
   timestamp: z.string(),
   predictions: z.array(EnrichedPredictionSchema),

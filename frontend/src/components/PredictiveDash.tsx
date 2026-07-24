@@ -90,14 +90,14 @@ export default function PredictiveDash() {
     if (!data || data.emergingAnomalies.length === 0) return [];
     // Always map the worst anomaly to the timeline
     const anomaly = data.emergingAnomalies[0];
-    return generateTimelineData(anomaly.historicalMonthlyAverage, anomaly.predictedIncidentCount, data.district.districtId);
+    return generateTimelineData(anomaly.historicalMonthlyAverage, anomaly.predictedIncidentCount, String(data.district.districtId));
   }, [data]);
 
   // Prepare Radar Data for SocioEconomic Explainability
   const radarData = useMemo(() => {
     if (!data) return [];
     const se = data.hiddenCorrelations.socioEconomicDrivers;
-    const distSeed = parseInt(data.district.districtId || "101");
+    const distSeed = parseInt(String(data.district.districtId) || "101");
     return [
       { subject: 'Urbanization', A: se.urbanizationIndex * 100, fullMark: 100 },
       { subject: 'Poverty Index', A: se.povertyIndex * 100, fullMark: 100 },
@@ -292,7 +292,7 @@ export default function PredictiveDash() {
                     <Radar name="Correlation" dataKey="A" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.2} />
                     <RechartsTooltip 
                       contentStyle={{ backgroundColor: '#0F172A', border: '1px solid #1E293B', borderRadius: '8px' }}
-                      formatter={(value: number) => [`${value.toFixed(1)}% Impact`, 'Correlation']}
+                      formatter={(value: any) => [`${Number(value).toFixed(1)}% Impact`, 'Correlation']}
                     />
                   </RadarChart>
                 </ResponsiveContainer>
@@ -362,7 +362,7 @@ export default function PredictiveDash() {
                 <BarChart3 size={14} /> Correlated Typologies Watchlist
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {data.emergingAnomalies.map((anomaly, idx) => (
+                {data.emergingAnomalies.map((anomaly: any, idx: number) => (
                   <div key={idx} className="bg-[#111827] rounded-xl p-5 border border-white/5 hover:bg-[#1E293B] transition-colors group">
                     <div className="flex justify-between items-start mb-4">
                       <div>
@@ -410,7 +410,7 @@ export default function PredictiveDash() {
                   <MapPin size={14} /> Spatiotemporal Hotspots
                 </h2>
                 <div className="flex flex-col gap-4">
-                  {data.spatiotemporalHotspots.map((hotspot, idx) => (
+                  {data.spatiotemporalHotspots.map((hotspot: any, idx: number) => (
                     <div key={idx} className="bg-[#111827] rounded-xl p-5 border border-white/5 flex flex-col gap-3">
                       <div className="flex justify-between items-start">
                         <div className="flex items-center gap-2">

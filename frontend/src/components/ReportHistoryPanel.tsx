@@ -8,13 +8,10 @@ import {
   Shield,
   FileWarning,
   Sparkles,
-  ExternalLink,
-  MapPin,
-  ChevronRight
+  MapPin
 } from 'lucide-react';
 import { fetchReportHistory, fetchAnomalies, generatePdfBrief } from '../data/api';
 import type { ReportHistoryItem, Anomaly } from '../data/schemas';
-import { useDashboard } from '../context/DashboardContext';
 import { districtIdToName } from '../utils/districts';
 import { DistrictDropdown } from './common/DistrictDropdown';
 import { DateRangeDropdown } from './common/DateRangeDropdown';
@@ -22,7 +19,6 @@ import { DateRangeDropdown } from './common/DateRangeDropdown';
 type GenerateState = 'idle' | 'generating' | 'success' | 'error';
 
 export default function ReportHistoryPanel() {
-  const { filters } = useDashboard();
   const [reports, setReports] = useState<ReportHistoryItem[]>([]);
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,8 +34,6 @@ export default function ReportHistoryPanel() {
   );
 
   const [generateState, setGenerateState] = useState<GenerateState>('idle');
-  const [generateError, setGenerateError] = useState<string | null>(null);
-  const [lastGeneratedUrl, setLastGeneratedUrl] = useState<string | null>(null);
   const [selectedAnomaly, setSelectedAnomaly] = useState<string | null>(null);
 
   useEffect(() => {
@@ -68,7 +62,6 @@ export default function ReportHistoryPanel() {
   const handleGenerate = useCallback(
     async (anomaly: Anomaly) => {
       setGenerateState('generating');
-      setGenerateError(null);
       setSelectedAnomaly(anomaly.id);
 
       try {
@@ -81,7 +74,6 @@ export default function ReportHistoryPanel() {
           message: anomaly.description,
           severity: anomaly.severity.toUpperCase(),
         });
-        setLastGeneratedUrl(url);
         setGenerateState('success');
         
         // Optimistically add it to reports
@@ -95,7 +87,6 @@ export default function ReportHistoryPanel() {
         }, ...prev]);
         
       } catch (err) {
-        setGenerateError(err instanceof Error ? err.message : 'Generation failed');
         setGenerateState('error');
       }
     },

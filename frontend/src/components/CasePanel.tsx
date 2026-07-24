@@ -1,4 +1,4 @@
-import { X, FileText, User } from 'lucide-react';
+import { X, User } from 'lucide-react';
 import type { NetworkNode, NetworkLink } from '../data/schemas';
 
 interface CasePanelProps {
